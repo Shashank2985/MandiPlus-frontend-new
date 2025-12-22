@@ -1,8 +1,68 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Prerequisites
+
+- Node.js 18+ installed
+- npm, yarn, pnpm, or bun package manager
+
+## Installation
+
+1. Clone the repository
+2. Install dependencies:
+
+```bash
+npm install
+# or
+yarn install
+# or
+pnpm install
+# or
+bun install
+```
+
+## Environment Setup
+
+This project uses [pushenv](https://github.com/pushenv/pushenv) for secure environment variable management.
+
+### Step 1: Install pushenv globally
+
+```bash
+npm i -g pushenv
+```
+
+### Step 2: Initialize pushenv
+
+Run the following command and enter the passphrase when prompted:
+
+```bash
+pushenv init
+```
+
+This will decrypt and set up your environment variables from the encrypted configuration.
+
+### Step 3: Pull environment variables
+
+To get the latest environment variables from the remote pushenv service, run:
+
+```bash
+pushenv pull
+```
+
+This command will fetch and decrypt the latest environment variables and update your local `.env` file. You may be prompted for the passphrase.
+
+> **Note:** Use `pushenv pull` whenever you need to update your local environment variables with the latest changes from the remote repository.
+
+### Environment Variables
+
+The following environment variables are required:
+
+- `NEXT_PUBLIC_API_BASE_URL` - The base URL for the backend API (defaults to `http://localhost:5000/api` if not set)
+
+After running `pushenv init` or `pushenv pull`, your `.env` file will be created with the necessary environment variables.
+
 ## Getting Started
 
-First, run the development server:
+First, ensure you've completed the environment setup above, then run the development server:
 
 ```bash
 npm run dev

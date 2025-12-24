@@ -5,13 +5,17 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Button from "@/shared/components/Button";
 import Input from "@/shared/components/Input";
-import { login, verifyLoginOtp } from "@/features/auth/api";
+// Renaming 'login' to 'apiLogin' to distinguish from Context login
+import { login as apiLogin, verifyLoginOtp } from "@/features/auth/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../context/AuthContext";
 
 const LoginPage = () => {
     const router = useRouter();
-    const { user, loading: authLoading } = useAuth();
+    // 1. Get the login function from your Context
+    // (Check your AuthContext: is it named 'login', 'setToken', or 'setUser'?)
+    const { login: contextLogin } = useAuth();
+
     const [isLoading, setIsLoading] = useState(false);
     const [mobileNumber, setMobileNumber] = useState("");
     const [otp, setOtp] = useState("");
@@ -23,17 +27,17 @@ const LoginPage = () => {
 
         try {
             if (!showOtpField) {
-                // First step: Request OTP
+                // --- Step 1: Send OTP ---
                 if (!mobileNumber || mobileNumber.length !== 10) {
                     toast.error("Please enter a valid 10-digit mobile number");
                     return;
                 }
 
-                await login(mobileNumber);
+                await apiLogin(mobileNumber);
                 setShowOtpField(true);
                 toast.success("OTP sent to your mobile number!");
             } else {
-                // Second step: Verify OTP
+                // --- Step 2: Verify OTP ---
                 if (!otp || otp.length !== 6) {
                     toast.error("Please enter a valid 6-digit OTP");
                     return;
@@ -41,11 +45,22 @@ const LoginPage = () => {
 
                 const response = await verifyLoginOtp({ mobileNumber, otp });
 
-                if (response.accessToken) {
+                // Check what the backend actually sent
+                console.log("Backend Login Response:", response);
+
+                // Use 'accessToken' or 'token' depending on what the console log says
+                const token = response.accessToken;
+
+                if (token) {
+                    if (contextLogin) {
+                        // Await the login to ensure state updates before anything else happens
+                        await contextLogin(token, response.user);
+                    }
                     toast.success("Login successful!");
-                    // The AuthProvider will handle the redirection based on the updated auth state
-                    router.push("/home");
-                    router.refresh(); // Refresh to ensure auth state is updated
+                    // router.push("/home") is now handled inside AuthContext, 
+                    // but you can keep it here as a backup if you want.
+                } else {
+                    toast.error("Login failed: No access token received");
                 }
             }
         } catch (error: any) {
@@ -57,8 +72,9 @@ const LoginPage = () => {
     };
 
     return (
+        // ... (Your JSX remains exactly the same)
         <div className={`min-h-screen bg-gray-300 flex flex-col justify-end`}>
-            {/* Bottom Sheet */}
+            {/* ... rest of your UI ... */}
             <div className="bg-white rounded-t-3xl px-6 py-8 shadow-2xl">
                 <h2
                     className="text-2xl font-bold mb-1 text-gray-800"

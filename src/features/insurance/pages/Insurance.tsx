@@ -64,7 +64,7 @@ const questions: Question[] = [
         field: 'supplierAddress',
         type: 'text',
         text: {
-            en: "Kahan Se",
+            en: "Place of Supply/Supply kahan se",
             hi: "भेजने वाले का पता"
         }
     },
@@ -80,7 +80,7 @@ const questions: Question[] = [
         field: 'buyerName',
         type: 'text',
         text: {
-            en: "Party Kaun",
+            en: "Party Ka Naam",
             hi: "पार्टी का नाम"
         }
     },
@@ -96,7 +96,7 @@ const questions: Question[] = [
         field: 'itemName',
         type: 'text',
         text: {
-            en: "Item Kya",
+            en: "Item Kya hai",
             hi: "आइटम का नाम"
         }
     },
@@ -122,7 +122,7 @@ const questions: Question[] = [
         type: 'number',
         step: "0.01",
         text: {
-            en: "Kya Bhaav",
+            en: "Kya Bhaav Lgaya",
             hi: "रेट/भाव"
         }
     },
@@ -148,7 +148,7 @@ const questions: Question[] = [
         type: 'file',
         optional: true,
         text: {
-            en: "Parchi Photo",
+            en: "Kanta Parchi Photo",
             hi: "कांटा पर्ची"
         }
     },
@@ -215,7 +215,7 @@ const Insurance = () => {
             submitData.append('shipToAddress[]', buyAddr);
 
             const prodName = formData.itemName || 'Item';
-            submitData.append('productName[]', prodName);
+            submitData.append('productName', prodName);
 
             // --- 3. STRING FIELDS ---
             submitData.append('supplierName', formData.supplierName || 'Unknown Supplier');

@@ -84,14 +84,24 @@ export const createInsuranceForm = async (
 
 /**
  * Get all insurance forms for the logged-in user
- * GET /invoices
+ * GET /invoices/user/:userId
  */
 export const getMyInsuranceForms = async (): Promise<InsuranceForm[]> => {
     try {
         const token = localStorage.getItem("token");
+        const userData = localStorage.getItem("user");
+
+        if (!userData) {
+            throw new Error("User not found. Please log in again.");
+        }
+
+        const user = JSON.parse(userData);
+        if (!user.id) {
+            throw new Error("User ID not found. Please log in again.");
+        }
 
         const response = await axios.get(
-            `${API_BASE_URL}/invoices`,
+            `${API_BASE_URL}/invoices/user/${user.id}`,
             {
                 headers: {
                     Authorization: `Bearer ${token}`,

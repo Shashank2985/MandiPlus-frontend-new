@@ -201,6 +201,19 @@ const Insurance = () => {
         try {
             const submitData = new FormData();
 
+            // Add user ID from localStorage if available
+            const userData = localStorage.getItem('user');
+            if (userData) {
+                try {
+                    const user = JSON.parse(userData);
+                    if (user.id) {
+                        submitData.append('userId', user.id);
+                    }
+                } catch (e) {
+                    console.error('Error parsing user data from localStorage', e);
+                }
+            }
+
             // --- 1. GENERATED FIELDS ---
             submitData.append('invoiceNumber', `INV-${Date.now()}`);
             submitData.append('invoiceDate', new Date().toISOString());
@@ -245,8 +258,14 @@ const Insurance = () => {
                 submitData.append('weighmentSlips', finalFile);
             }
 
-            // Call API
-            const invoice = await createInsuranceForm(submitData);
+            // Call API with proper error handling
+            let invoice;
+            try {
+                invoice = await createInsuranceForm(submitData);
+            } catch (error) {
+                console.error('Error creating invoice:', error);
+                throw new Error('Failed to create invoice. Please try again.');
+            }
 
             // --- FIX: Correctly Read Response ---
             // The backend might return 'pdfUrl' (camelCase) or 'pdfURL'. check both.
@@ -430,7 +449,7 @@ const Insurance = () => {
                     </button>
                     <div className="w-9 h-9 rounded-full">
                         <img className="w-full h-full rounded-full object-cover" src="/images/logo.jpeg" alt="" />
-                        </div>
+                    </div>
                     <div>
                         <p className="font-medium leading-none">Mandi Plus</p>
                         <p className="text-xs opacity-80">online</p>

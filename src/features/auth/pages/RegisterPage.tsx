@@ -112,20 +112,33 @@ const RegisterPage = () => {
   return (
     <div className="min-h-screen bg-gray-300 flex flex-col relative overflow-hidden">
 
-      {/* FIXED: Added min-h-[350px] to ensure truck is always visible */}
-      <div className="w-full h-[50vh] min-h-[350px] relative flex-shrink-0">
+      {/* FIXED IMAGE CONTAINER:
+        1. Removed 'h-[50vh]' and 'fill' which forced cropping.
+        2. Added 'pb-8'. This creates a buffer zone at the bottom of the container.
+        3. The buffer zone is what gets overlapped by the form, ensuring the actual image is not covered.
+      */}
+      <div className="w-full relative bg-gray-200 pb-8">
         <Image
-          src="/images/truck-img.jpg"
-          alt="Truck on the road"
-          fill
-          className="object-cover object-center"
+          src="/images/truck-img.png"
+          alt="MandiPlus Truck"
+          // Providing width/height allows Next.js to calculate aspect ratio.
+          // Adjust these numbers to match your actual image resolution if needed.
+          width={1200}
+          height={800}
+          // 'w-full h-auto' ensures it fits the width and scales height automatically.
+          // 'object-contain' is default behavior for standard img tags, ensuring no cropping.
+          className="w-full h-auto block"
           priority
-          sizes="100vw"
         />
-        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/20 to-transparent" />
+        {/* Subtle shadow gradient at the bottom to blend the overlap area */}
+        <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-black/5 to-transparent" />
       </div>
 
-      <div className="flex-1 bg-white -mt-10 rounded-t-3xl px-6 py-8 shadow-2xl relative z-10 flex flex-col">
+      {/* FORM CONTAINER:
+        1. '-mt-8' pulls the form up exactly into the padding buffer we created above.
+        2. This creates the rounded overlap effect WITHOUT hiding the truck's tires or bottom text.
+      */}
+      <div className="flex-1 bg-white -mt-8 px-6 py-8 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] relative z-10 flex flex-col">
         <h2
           className="text-2xl font-bold mb-1 text-gray-800"
           style={{ fontFamily: "Poppins, sans-serif" }}

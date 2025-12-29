@@ -66,26 +66,29 @@ const LoginPage = () => {
     };
 
     return (
-        // Updated Main Container to match RegisterPage
         <div className="min-h-screen bg-gray-300 flex flex-col relative overflow-hidden">
 
-            {/* Updated Image Container: Added min-h and flex-shrink */}
-            <div className="w-full h-[50vh] min-h-[350px] relative flex-shrink-0">
+            {/* IMAGE SECTION:
+               - w-full h-auto: Allows image to scale naturally without cropping.
+               - pb-8: Adds padding at the bottom for the white card to overlap into.
+            */}
+            <div className="w-full relative bg-gray-200 pb-8">
                 <Image
-                    src="/images/truck-img.jpg"
+                    src="/images/truck-img.png" // Make sure this matches your file name/extension
                     alt="Truck on the road"
-                    fill
-                    // Added object-center for better focus
-                    className="object-cover object-center"
+                    width={1200}
+                    height={800}
+                    className="w-full h-auto block"
                     priority
-                    sizes="100vw"
                 />
-                {/* Updated Gradient to match RegisterPage visual */}
-                <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-black/5 to-transparent" />
             </div>
 
-            {/* Updated Bottom Sheet: Added flex-1, negative margin (-mt-10), and z-index */}
-            <div className="flex-1 bg-white -mt-10 rounded-t-3xl px-6 py-8 shadow-2xl relative z-10 flex flex-col">
+            {/* FORM SECTION:
+               - -mt-8: Pulls the card up to overlap the padding area of the image container.
+               - rounded-t-[30px]: consistent styling with Register page.
+            */}
+            <div className="flex-1 bg-white -mt-8 px-6 py-8 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] relative z-10 flex flex-col">
                 <h2
                     className="text-2xl font-bold mb-1 text-gray-800"
                     style={{ fontFamily: "Poppins, sans-serif" }}
@@ -95,7 +98,7 @@ const LoginPage = () => {
 
                 <p className="text-gray-800 mb-6">Sign in to your account</p>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-4 flex-1 flex flex-col">
                     {!showOtpField ? (
                         <Input
                             className="bg-gray-100/80"
@@ -120,18 +123,20 @@ const LoginPage = () => {
                         </>
                     )}
 
-                    <Button
-                        type="submit"
-                        disabled={isLoading}
-                        className={`w-full py-3 rounded-xl text-white ${isLoading ? "bg-gray-400" : "bg-[#4309ac]"
-                            }`}
-                    >
-                        {isLoading
-                            ? "Processing..."
-                            : showOtpField
-                                ? "Verify OTP"
-                                : "Get OTP"}
-                    </Button>
+                    <div className="pt-2">
+                        <Button
+                            type="submit"
+                            disabled={isLoading}
+                            className={`w-full py-3 rounded-xl text-white ${isLoading ? "bg-gray-400" : "bg-[#4309ac]"
+                                }`}
+                        >
+                            {isLoading
+                                ? "Processing..."
+                                : showOtpField
+                                    ? "Verify OTP"
+                                    : "Get OTP"}
+                        </Button>
+                    </div>
 
                     <div className="text-center text-sm">
                         {showOtpField ? (

@@ -158,6 +158,8 @@ const Insurance = () => {
     const router = useRouter(); // Changed from useNavigate
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const textInputRef = useRef<HTMLInputElement>(null);
+    const chatContainerRef = useRef<HTMLDivElement>(null);
 
     const [formData, setFormData] = useState<FormData>({
         supplierName: '',
@@ -183,6 +185,27 @@ const Insurance = () => {
     ]);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
+    const [viewportHeight, setViewportHeight] = useState<string>('100vh');
+
+    // Handle viewport height changes (mobile keyboard)
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const updateHeight = () => {
+            const height = window.visualViewport?.height || window.innerHeight;
+            setViewportHeight(`${height}px`);
+        };
+
+        updateHeight();
+        
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', updateHeight);
+            return () => window.visualViewport?.removeEventListener('resize', updateHeight);
+        } else {
+            window.addEventListener('resize', updateHeight);
+            return () => window.removeEventListener('resize', updateHeight);
+        }
+    }, []);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -435,30 +458,35 @@ const Insurance = () => {
     const isFileInput = currentQuestion.type === 'file';
 
     return (
-        <div className="flex flex-col h-screen bg-[#efeae2]">
-            {/* WhatsApp Header - (No changes here) */}
-            <div className="bg-[#075E54] text-white px-4 py-3 flex items-center justify-between shadow z-10">
-                <div className="flex items-center gap-3">
+        <div 
+            className="flex flex-col bg-[#efeae2] overflow-hidden fixed inset-0"
+            style={{ height: viewportHeight } as React.CSSProperties}
+        >
+            {/* WhatsApp Header - Fixed Height */}
+            <div className="bg-[#075E54] text-white px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between shadow z-10 flex-shrink-0">
+                <div className="flex items-center gap-2 sm:gap-3">
                     <button
                         onClick={() => router.push('/home')}
-                        className="p-1 -ml-2 rounded-full hover:bg-[#128C7E] transition-colors"
+                        className="p-1 -ml-1 sm:-ml-2 rounded-full hover:bg-[#128C7E] transition-colors touch-manipulation"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
                         </svg>
                     </button>
-                    <div className="w-9 h-9 rounded-full">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex-shrink-0">
                         <img className="w-full h-full rounded-full object-cover" src="/images/logo.jpeg" alt="" />
                     </div>
-                    <div>
-                        <p className="font-medium leading-none">Mandi Plus</p>
+                    <div className="min-w-0">
+                        <p className="font-medium leading-none text-sm sm:text-base truncate">Mandi Plus</p>
                         <p className="text-xs opacity-80">online</p>
                     </div>
                 </div>
             </div>
 
-            {/* Chat Area - FIXED */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative"
+            {/* Chat Area - Flexible, Scrollable */}
+            <div 
+                ref={chatContainerRef}
+                className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3 relative"
                 style={{
                     // 1. Use a solid background color + the image
                     backgroundColor: "#E5DDD5",
@@ -471,21 +499,21 @@ const Insurance = () => {
                 {messages.map((m, i) => (
                     <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div
-                            className={`max-w-[75%] px-3 py-2 text-sm rounded-lg shadow-sm ${m.sender === 'user'
+                            className={`max-w-[85%] sm:max-w-[75%] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg shadow-sm ${m.sender === 'user'
                                 ? 'bg-[#dcf8c6] rounded-br-none text-black' // Added text-black
                                 : 'bg-white rounded-bl-none text-black'     // Added text-black
                                 }`}
                         >
-                            <div className="whitespace-pre-line">{m.text}</div>
+                            <div className="whitespace-pre-line leading-relaxed">{m.text}</div>
                         </div>
                     </div>
                 ))}
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Bar - FIXED */}
-            <div className="bg-[#f0f0f0] px-3 py-2 border-t z-10">
-                {error && <p className="text-red-500 text-xs mb-1">{error}</p>}
+            {/* Input Bar - Fixed Height */}
+            <div className="bg-[#f0f0f0] px-2 sm:px-3 py-2 border-t z-10 flex-shrink-0">
+                {error && <p className="text-red-500 text-xs mb-1 px-1">{error}</p>}
 
                 {isFileInput ? (
                     <div className="flex justify-center">
@@ -500,15 +528,16 @@ const Insurance = () => {
                                 />
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="bg-[#25D366] text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-sm hover:bg-[#20bd5a]"
+                                    className="bg-[#25D366] text-white px-3 sm:px-4 py-2 rounded-full flex items-center gap-2 shadow-sm hover:bg-[#20bd5a] text-xs sm:text-sm"
                                 >
                                     <PaperClipIcon className="w-4 h-4" />
-                                    {language === 'hi' ? 'वजन पर्ची अपलोड करें' : 'Upload weightment slip'}
+                                    <span className="hidden sm:inline">{language === 'hi' ? 'वजन पर्ची अपलोड करें' : 'Upload weightment slip'}</span>
+                                    <span className="sm:hidden">{language === 'hi' ? 'अपलोड' : 'Upload'}</span>
                                 </button>
                             </>
                         ) : (
                             <button
-                                className="bg-[#25D366] text-white px-4 py-2 rounded-full flex items-center gap-2 opacity-50 cursor-not-allowed"
+                                className="bg-[#25D366] text-white px-3 sm:px-4 py-2 rounded-full flex items-center gap-2 opacity-50 cursor-not-allowed text-xs sm:text-sm"
                                 disabled
                             >
                                 {language === 'hi' ? 'सबमिट हो रहा है...' : 'Submitting...'}
@@ -518,20 +547,27 @@ const Insurance = () => {
                 ) : (
                     <form onSubmit={handleSubmit} className="flex items-center gap-2">
                         <input
+                            ref={textInputRef}
                             type={currentQuestion.type === 'language' ? 'text' : currentQuestion.type}
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
                             placeholder={currentQuestion.type === 'number'
                                 ? (language === 'hi' ? 'संख्या दर्ज करें...' : 'Enter a number...')
                                 : (language === 'hi' ? 'अपना उत्तर टाइप करें...' : 'Type your answer...')}
-                            className="flex-1 rounded-full px-4 py-2 text-sm focus:outline-none bg-white text-black border border-gray-200"
+                            className="flex-1 rounded-full px-3 sm:px-4 py-2 text-xs sm:text-sm focus:outline-none bg-white text-black border border-gray-200"
                             disabled={isSubmitting}
                             step={currentQuestion.step}
+                            onFocus={() => {
+                                // Scroll to bottom when input is focused
+                                setTimeout(() => {
+                                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                                }, 300);
+                            }}
                         />
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="bg-[#25D366] p-2 rounded-full text-white hover:bg-[#20bd5a] shadow-sm transition-colors"
+                            className="bg-[#25D366] p-2 sm:p-2.5 rounded-full text-white hover:bg-[#20bd5a] shadow-sm transition-colors min-w-[40px] sm:min-w-[44px] flex items-center justify-center"
                         >
                             <ArrowUpIcon className="h-5 w-5 text-white" />
                         </button>

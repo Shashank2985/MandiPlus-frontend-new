@@ -135,7 +135,7 @@ Vehicle Fitness – ${data.fitnessStatus}
                 <img
                     src={imgSource}
                     alt="Vehicle"
-                    className="rounded-lg mt-2 max-w-[240px] w-full object-cover"
+                    className="rounded-lg mt-2 max-w-[200px] sm:max-w-[240px] w-full object-cover"
                 />
             );
         }
@@ -150,26 +150,26 @@ Vehicle Fitness – ${data.fitnessStatus}
     return (
         <div className="flex flex-col h-screen bg-[#efeae2]">
             {/* HEADER */}
-            <div className="bg-[#075E54] text-white px-4 py-3 flex items-center shadow z-10">
-                <button onClick={() => router.push('/home')} className="mr-3 p-1 rounded-full hover:bg-[#128C7E]">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+            <div className="bg-[#075E54] text-white px-3 sm:px-4 py-2.5 sm:py-3 flex items-center shadow z-10">
+                <button onClick={() => router.push('/home')} className="mr-2 sm:mr-3 p-1 rounded-full hover:bg-[#128C7E] touch-manipulation">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                 </button>
-                <div className="flex-1">
-                    <p className="font-medium">Know Your Vehicle</p>
+                <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm sm:text-base truncate">Know Your Vehicle</p>
                     <p className="text-xs opacity-80">Mandi Plus</p>
                 </div>
                 {/* Header Icons */}
-                <div className="flex gap-4">
-                    <div className="p-1 hover:bg-[#128C7E] rounded-full cursor-pointer">
-                        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                <div className="flex gap-2 sm:gap-4">
+                    <div className="p-1 hover:bg-[#128C7E] rounded-full cursor-pointer touch-manipulation">
+                        <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4z" />
                             <path d="M3 6a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6z" />
                         </svg>
                     </div>
-                    <div className="p-1 hover:bg-[#128C7E] rounded-full cursor-pointer">
-                        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <div className="p-1 hover:bg-[#128C7E] rounded-full cursor-pointer touch-manipulation">
+                        <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                         </svg>
                     </div>
@@ -178,7 +178,7 @@ Vehicle Fitness – ${data.fitnessStatus}
 
             {/* CHAT AREA */}
             <div
-                className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative"
+                className="flex-1 overflow-y-auto px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3 relative"
                 style={{
                     backgroundColor: "#E5DDD5",
                     backgroundImage: "url('/images/whatsapp-bg.png')",
@@ -188,7 +188,7 @@ Vehicle Fitness – ${data.fitnessStatus}
                 {messages.map((message, index) => (
                     <div key={index} className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div
-                            className={`max-w-[90%] px-3 py-2 text-sm rounded-lg shadow-sm
+                            className={`max-w-[85%] sm:max-w-[90%] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg shadow-sm
                             ${message.sender === 'user'
                                     ? 'bg-[#DCF8C6] rounded-tr-none text-black'
                                     : 'bg-white rounded-tl-none text-black'}`}
@@ -197,9 +197,9 @@ Vehicle Fitness – ${data.fitnessStatus}
                                 {renderMessageContent(message)}
 
                                 {message.isQuestion && showButtons && (
-                                    <div className="flex gap-2 mt-3">
+                                    <div className="flex gap-2 mt-3 flex-wrap">
                                         <button
-                                            className="bg-[#25D366] text-white px-4 py-2 rounded-full text-sm hover:bg-[#20bd5a] transition-colors"
+                                            className="bg-[#25D366] text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm hover:bg-[#20bd5a] transition-colors touch-manipulation"
                                             onClick={() => {
                                                 setShowButtons(false);
                                                 setMessages(prev => [
@@ -214,7 +214,7 @@ Vehicle Fitness – ${data.fitnessStatus}
                                             Yes / हाँ / Haan
                                         </button>
                                         <button
-                                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm hover:bg-gray-300 transition-colors"
+                                            className="bg-gray-200 text-gray-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm hover:bg-gray-300 transition-colors touch-manipulation"
                                             onClick={() => {
                                                 setShowButtons(false);
                                                 setIsProcessing(false); // Allow new searches
@@ -240,19 +240,19 @@ Vehicle Fitness – ${data.fitnessStatus}
             </div>
 
             {/* INPUT */}
-            <div className="bg-[#F0F0F0] px-3 py-2 border-t z-10">
+            <div className="bg-[#F0F0F0] px-2 sm:px-3 py-2 border-t z-10">
                 <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                     <input
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         placeholder="Enter vehicle number..."
-                        className="flex-1 rounded-full px-4 py-2 text-sm focus:outline-none bg-white text-black border border-gray-200"
+                        className="flex-1 rounded-full px-3 sm:px-4 py-2 text-xs sm:text-sm focus:outline-none bg-white text-black border border-gray-200"
                         disabled={isProcessing}
                     />
                     <button
                         type="submit"
                         disabled={isProcessing}
-                        className={`p-2 rounded-full text-white transition-colors ${isProcessing ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#25D366] hover:bg-[#20bd5a]'
+                        className={`p-2 sm:p-2.5 rounded-full text-white transition-colors min-w-[40px] sm:min-w-[44px] flex items-center justify-center ${isProcessing ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#25D366] hover:bg-[#20bd5a]'
                             }`}
                     >
                         <ArrowUpIcon className="h-5 w-5" />

@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
 import { ArrowUpIcon, PaperClipIcon } from '@heroicons/react/24/outline';
 import { createInsuranceForm } from '../api';
 
@@ -68,14 +67,6 @@ const questions: Question[] = [
             hi: "भेजने वाले का पता"
         }
     },
-    // {
-    //     field: 'placeOfSupply',
-    //     type: 'text',
-    //     text: {
-    //         en: "Kahan Tak",
-    //         hi: "माल कहाँ जाएगा"
-    //     }
-    // },
     {
         field: 'buyerName',
         type: 'text',
@@ -100,14 +91,6 @@ const questions: Question[] = [
             hi: "आइटम का नाम"
         }
     },
-    // {
-    //     field: 'hsn',
-    //     type: 'text',
-    //     text: {
-    //         en: "HSN Code",
-    //         hi: "HSN कोड"
-    //     }
-    // },
     {
         field: 'quantity',
         type: 'number',
@@ -154,8 +137,10 @@ const questions: Question[] = [
     },
 ];
 
-const Insurance = () => {
-    const router = useRouter(); // Changed from useNavigate
+/* ---------------- COMPONENT ---------------- */
+
+const InsuranceIOS = () => {
+    const router = useRouter();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textInputRef = useRef<HTMLInputElement>(null);
@@ -186,32 +171,77 @@ const Insurance = () => {
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
     const [viewportHeight, setViewportHeight] = useState<string>('100vh');
+    const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const lastHeight = useRef<number>(0);
 
-    // Handle viewport height changes (mobile keyboard)
+    // Handle viewport height changes (mobile keyboard) with Visual Viewport API
     useEffect(() => {
-        if (typeof window === 'undefined') return;
+        if (typeof window === 'undefined' || !('visualViewport' in window)) return;
 
-        const updateHeight = () => {
-            const height = window.visualViewport?.height || window.innerHeight;
-            setViewportHeight(`${height}px`);
+        const visualViewport = window.visualViewport!;
+
+        const updateViewport = () => {
+            const newHeight = visualViewport.height;
+            const offsetTop = visualViewport.offsetTop;
+
+            // Only update if height changed significantly (more than 1px)
+            if (Math.abs(newHeight - lastHeight.current) > 1) {
+                lastHeight.current = newHeight;
+                setViewportHeight(`${newHeight}px`);
+
+                // Check if keyboard is visible
+                const keyboardVisible = newHeight < window.innerHeight * 0.7;
+                if (keyboardVisible !== isKeyboardVisible) {
+                    setIsKeyboardVisible(keyboardVisible);
+
+                    // Scroll to bottom when keyboard appears
+                    if (keyboardVisible) {
+                        setTimeout(() => {
+                            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                        }, 100);
+                    }
+                }
+            }
+
+            // Apply transform to handle viewport offset
+            if (viewportRef.current) {
+                viewportRef.current.style.transform = `translateY(${offsetTop}px)`;
+            }
         };
 
-        updateHeight();
+        const handleScroll = (e: Event) => {
+            // Prevent rubber-banding effect
+            if (visualViewport.pageTop > 0) {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'auto' });
+                return false;
+            }
+            return true;
+        };
 
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', updateHeight);
-            return () => window.visualViewport?.removeEventListener('resize', updateHeight);
-        } else {
-            window.addEventListener('resize', updateHeight);
-            return () => window.removeEventListener('resize', updateHeight);
-        }
-    }, []);
+        // Initial setup
+        updateViewport();
+
+        // Add event listeners with passive: false to allow preventDefault
+        visualViewport.addEventListener('resize', updateViewport);
+        visualViewport.addEventListener('scroll', updateViewport);
+        window.addEventListener('scroll', handleScroll, { passive: false });
+
+        return () => {
+            visualViewport.removeEventListener('resize', updateViewport);
+            visualViewport.removeEventListener('scroll', updateViewport);
+            window.removeEventListener('scroll', handleScroll);
+        };
+    }, [isKeyboardVisible]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    /* ========================= SUBMIT ========================= */
+    const currentQuestion = questions[currentQuestionIndex];
+    const isFileInput = currentQuestion.type === 'file';
+
     const submitInsuranceForm = async (fileArgument: File | null = null) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
@@ -240,7 +270,7 @@ const Insurance = () => {
             // --- 1. GENERATED FIELDS ---
             submitData.append('invoiceNumber', `INV-${Date.now()}`);
             submitData.append('invoiceDate', new Date().toISOString());
-            submitData.append('placeOfSupply', formData.supplierAddress || 'State');//Made place of supply same as supplier address
+            submitData.append('placeOfSupply', formData.supplierAddress || 'State');
 
             // --- 2. ARRAY FIELDS (Use [] suffix) ---
             const supAddr = formData.supplierAddress || 'Unknown Address';
@@ -290,8 +320,7 @@ const Insurance = () => {
                 throw new Error('Failed to create invoice. Please try again.');
             }
 
-            // --- FIX: Correctly Read Response ---
-            // The backend might return 'pdfUrl' (camelCase) or 'pdfURL'. check both.
+            // Handle response
             const rawPdfUrl = invoice.pdfUrl || invoice.pdfURL;
 
             setMessages(prev => [
@@ -300,22 +329,18 @@ const Insurance = () => {
             ]);
 
             if (rawPdfUrl) {
-                // If it's a Cloudinary link, use it directly. If local, add prefix.
                 const finalLink = rawPdfUrl.startsWith('http')
                     ? rawPdfUrl
                     : `http://localhost:3000${rawPdfUrl}`;
 
                 window.location.href = finalLink;
             } else {
-                // PDF is generating in background (Async)
                 setMessages(prev => [
                     ...prev,
                     { text: 'PDF is generating... Redirecting to My Forms.', sender: 'bot' }
                 ]);
                 setTimeout(() => {
                     router.push("/home");
-
-
                 }, 2000);
             }
 
@@ -355,8 +380,6 @@ const Insurance = () => {
             setMessages(prev => [
                 ...prev,
                 { text: 'Tender Coconut', sender: 'user' },
-                // { text: getQuestionText(questions[questions.findIndex(q => q.field === 'hsn')]), sender: 'bot' },
-                // { text: '08011910', sender: 'user' }
             ]);
         }
 
@@ -412,14 +435,11 @@ const Insurance = () => {
 
         setError('');
 
-        // Handle form data updates excluding special fields like 'language' or 'weightmentSlip'
-        // which are not directly inside the formData state object in the same way
-        // Add this type guard function at the top level of your component
+        // Handle form data updates
         const isFormField = (field: keyof FormData | 'language' | 'weightmentSlip'): field is keyof FormData => {
             return field !== 'language' && field !== 'weightmentSlip';
         };
 
-        // Then in your handleSubmit function:
         if (isFormField(q.field)) {
             const valueToStore = (q.type === 'number' && currentInput)
                 ? parseFloat(currentInput)
@@ -454,19 +474,25 @@ const Insurance = () => {
         await submitInsuranceForm(file);
     };
 
-    const currentQuestion = questions[currentQuestionIndex];
-    const isFileInput = currentQuestion.type === 'file';
+    // ... (previous code remains the same)
 
     return (
         <div
-            className="flex flex-col bg-[#efeae2] overflow-hidden fixed inset-0"
-            style={{ height: viewportHeight } as React.CSSProperties}
+            ref={viewportRef}
+            className="fixed top-0 left-0 right-0 flex flex-col bg-gray-50 overflow-hidden"
+            style={{
+                height: viewportHeight,
+                WebkitOverflowScrolling: 'touch',
+                touchAction: 'pan-y',
+                overscrollBehavior: 'none',
+                transform: 'translateZ(0)'
+            }}
         >
             {/* WhatsApp Header - Fixed Height */}
             <div className="bg-[#075E54] text-white px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between shadow z-10 shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3">
                     <button
-                        onClick={() => router.push('/home')}
+                        onClick={() => router.back()}
                         className="p-1 -ml-1 sm:-ml-2 rounded-full hover:bg-[#128C7E] transition-colors touch-manipulation"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6">
@@ -483,99 +509,106 @@ const Insurance = () => {
                 </div>
             </div>
 
-            {/* Chat Area - Flexible, Scrollable */}
+            {/* CHAT CONTAINER */}
             <div
-                ref={chatContainerRef}
-                className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-3 relative"
+                className="flex-1 overflow-y-auto p-4 space-y-4"
                 style={{
-                    backgroundImage: "url('/images/whatsapp-bg.png')",
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
+                    backgroundImage: 'url("/images/whatsapp-bg.png")',
+                    backgroundSize: 'contain',
                     backgroundAttachment: 'fixed',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundBlendMode: 'overlay'
+                    WebkitOverflowScrolling: 'touch',
+                    overscrollBehavior: 'contain',
+                    touchAction: 'pan-y',
+                    paddingBottom: isKeyboardVisible ? 'env(safe-area-inset-bottom, 20px)' : '0'
                 }}
+                ref={chatContainerRef}
             >
-                {messages.map((m, i) => (
-                    <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {messages.map((message, index) => (
+                    <div
+                        key={index}
+                        className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
                         <div
-                            className={`max-w-[85%] sm:max-w-[75%] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm rounded-lg shadow-sm ${m.sender === 'user'
-                                ? 'bg-[#dcf8c6] rounded-br-none text-black' // Added text-black
-                                : 'bg-white rounded-bl-none text-black'     // Added text-black
+                            className={`max-w-[80%] rounded-lg p-3 text-black ${message.sender === 'user'
+                                ? 'bg-green-100 rounded-tr-none'
+                                : 'bg-white rounded-tl-none'
                                 }`}
                         >
-                            <div className="whitespace-pre-line leading-relaxed">{m.text}</div>
+                            <p className="whitespace-pre-line">{message.text}</p>
                         </div>
                     </div>
                 ))}
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Bar - Fixed Height */}
-            <div className="bg-[#f0f0f0] px-2 sm:px-3 py-2 border-t z-10 shrink-0">
-                {error && <p className="text-red-500 text-xs mb-1 px-1">{error}</p>}
+            {/* INPUT AREA */}
+            <div
+                className="border-t bg-white p-3 flex-none"
+                style={{
+                    paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)',
+                    paddingLeft: 'max(env(safe-area-inset-left, 0px), 12px)',
+                    paddingRight: 'max(env(safe-area-inset-right, 0px), 12px)'
+                }}
+            >
+                <form onSubmit={handleSubmit} className="flex items-center space-x-2">
+                    <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`p-2 rounded-full ${isFileInput ? 'text-green-600' : 'text-gray-400'}`}
+                        disabled={!isFileInput || isSubmitting}
+                    >
+                        <PaperClipIcon className="w-6 h-6" />
+                    </button>
 
-                {isFileInput ? (
-                    <div className="flex justify-center">
-                        {!weightmentSlip ? (
-                            <>
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    onChange={handleFileChange}
-                                    accept="image/*"
-                                    className="hidden"
-                                />
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="bg-[#25D366] text-white px-3 sm:px-4 py-2 rounded-full flex items-center gap-2 shadow-sm hover:bg-[#20bd5a] text-xs sm:text-sm"
-                                >
-                                    <PaperClipIcon className="w-4 h-4" />
-                                    <span className="hidden sm:inline">{language === 'hi' ? 'वजन पर्ची अपलोड करें' : 'Upload weightment slip'}</span>
-                                    <span className="sm:hidden">{language === 'hi' ? 'अपलोड' : 'Upload'}</span>
-                                </button>
-                            </>
-                        ) : (
-                            <button
-                                className="bg-[#25D366] text-white px-3 sm:px-4 py-2 rounded-full flex items-center gap-2 opacity-50 cursor-not-allowed text-xs sm:text-sm"
-                                disabled
-                            >
-                                {language === 'hi' ? 'सबमिट हो रहा है...' : 'Submitting...'}
-                            </button>
-                        )}
-                    </div>
-                ) : (
-                    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        accept="image/*,application/pdf"
+                        onChange={handleFileChange}
+                        disabled={!isFileInput || isSubmitting}
+                    />
+
+                    <div className="flex-1 relative">
                         <input
                             ref={textInputRef}
-                            type={currentQuestion.type === 'language' ? 'text' : currentQuestion.type}
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            placeholder={currentQuestion.type === 'number'
-                                ? (language === 'hi' ? 'संख्या दर्ज करें...' : 'Enter a number...')
-                                : (language === 'hi' ? 'अपना उत्तर टाइप करें...' : 'Type your answer...')}
-                            className="flex-1 rounded-full px-3 sm:px-4 py-2 text-xs sm:text-sm focus:outline-none bg-white text-black border border-gray-200"
-                            disabled={isSubmitting}
+                            type={currentQuestion.type === 'number' ? 'number' : 'text'}
                             step={currentQuestion.step}
-                            onFocus={() => {
-                                // Scroll to bottom when input is focused
-                                setTimeout(() => {
-                                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                                }, 300);
-                            }}
+                            value={inputValue}
+                            onChange={e => setInputValue(e.target.value)}
+                            className="w-full border rounded-full px-4 py-3 pr-10 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-[16px] text-black"
+                            style={{ WebkitAppearance: 'none' }}
+                            inputMode={currentQuestion.type === 'number' ? 'decimal' : 'text'}
+                            placeholder={
+                                currentQuestion.type === 'number'
+                                    ? language === 'hi'
+                                        ? 'संख्या दर्ज करें...'
+                                        : 'Enter a number...'
+                                    : language === 'hi'
+                                        ? 'अपना उत्तर टाइप करें...'
+                                        : 'Type your answer...'
+                            }
+                            disabled={isFileInput || isSubmitting}
                         />
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="bg-[#25D366] p-2 sm:p-2.5 rounded-full text-white hover:bg-[#20bd5a] shadow-sm transition-colors min-w-10 sm:min-w-11 flex items-center justify-center"
-                        >
-                            <ArrowUpIcon className="h-5 w-5 text-white" />
-                        </button>
-                    </form>
-                )}
+                    </div>
+
+                    <button
+                        type="submit"
+                        disabled={isSubmitting || (!inputValue.trim() && !isFileInput)}
+                        className="p-2 bg-green-600 text-white rounded-full disabled:opacity-50"
+                    >
+                        <ArrowUpIcon className="w-6 h-6" />
+                    </button>
+                </form>
             </div>
+
+            {error && (
+                <div className="fixed bottom-4 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                    {error}
+                </div>
+            )}
         </div>
     );
 };
 
-export default Insurance;
+export default InsuranceIOS;

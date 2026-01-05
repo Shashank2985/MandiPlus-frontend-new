@@ -28,6 +28,7 @@ interface FormData {
     vehicleNumber: string;
     ownerName: string;
     cashOrCommission: string;
+    invoiceType: string;
     notes: string;
 }
 
@@ -100,6 +101,13 @@ const questions: Question[] = [
         optional: true,
         text: { en: "Cash ya Commission", hi: "नकद या कमीशन" }
     },
+    {
+        field: 'invoiceType',
+        type: 'select',
+        options: ['SUPPLIER_INVOICE', 'BUYER_INVOICE'],
+        optional: true,
+        text: { en: "Invoice Type", hi: "इनवॉइस का प्रकार" }
+    },
     { field: 'weightmentSlip', type: 'file', optional: true, text: { en: "Kanta Parchi Photo", hi: "कांटा पर्ची" } },
 ];
 
@@ -124,6 +132,7 @@ const Insurance = () => {
         ownerName: '',
         cashOrCommission: '',
         notes: '',
+        invoiceType: 'BUYER_INVOICE',
     });
 
     const [weightmentSlip, setWeightmentSlip] = useState<File | null>(null);
@@ -207,6 +216,7 @@ const Insurance = () => {
                 submitData.append('truckNumber', formData.vehicleNumber);
             }
             submitData.append('ownerName', formData.ownerName || 'Unknown Owner');
+            submitData.append('invoiceType', formData.invoiceType || 'BUYER_INVOICE');
             if (formData.hsn) submitData.append('hsnCode', formData.hsn);
             if (formData.notes) submitData.append('weighmentSlipNote', formData.notes);
 

@@ -46,6 +46,16 @@ interface LoginResponse {
     };
 }
 
+// interface for the filter params
+export interface InvoiceFilterParams {
+    invoiceType?: string;
+    startDate?: string;
+    endDate?: string;
+    supplierName?: string;
+    buyerName?: string;
+    userId?: string;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
 
 class AdminApi {
@@ -58,7 +68,7 @@ class AdminApi {
             headers: {
                 'Content-Type': 'application/json',
             },
-            withCredentials: true,
+            withCredentials: false,
         });
 
         // Add request interceptor to add auth token
@@ -156,6 +166,48 @@ class AdminApi {
                 message: error.response?.data?.message || 'Failed to fetch user insurance forms',
                 error: error.message,
             };
+        }
+    };
+
+    // New method: Filter invoices based on query params
+    public filterInvoices = async (filters: InvoiceFilterParams): Promise<ApiResponse<any[]>> => {
+        try {
+            const response = await this.client.get('/invoices/admin/filter', {
+                params: filters
+            });
+            if (Array.isArray(response.data)) {
+                return {
+                    success: true,
+                    data: response.data
+                };
+            }
+            return response.data;
+
+        } catch (error: any) {
+            console.error("Filter API Error:", error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to filter invoices',
+                error: error.message,
+            };
+        }
+    };
+
+    // New method: Export invoices to Excel
+    public exportInvoices = async (body: {
+        invoiceType?: string;
+        startDate?: string;
+        endDate?: string;
+        invoiceIds?: string[];
+    }): Promise<Blob | null> => {
+        try {
+            const response = await this.client.post('/invoices/admin/export', body, {
+                responseType: 'blob',
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Export failed', error);
+            return null;
         }
     };
 

@@ -6,6 +6,7 @@ import { useAdmin } from '@/features/admin/context/AdminContext';
 import { formatDate, formatCurrency } from '@/features/admin/utils/format';
 import { adminApi, InvoiceFilterParams } from '@/features/admin/api/admin.api';
 
+// --- Debounce Hook ---
 function useDebounce<T>(value: T, delay: number): T {
     const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
@@ -22,7 +23,6 @@ function useDebounce<T>(value: T, delay: number): T {
     return debouncedValue;
 }
 
-// --- Interface for Invoice Data ---
 interface Invoice {
     id: string;
     invoiceNumber: string;
@@ -34,7 +34,7 @@ interface Invoice {
     quantity: number;
     amount: number;
     pdfUrl?: string;
-    pdfURL?: string; // Fallback for case sensitivity
+    pdfURL?: string;
     createdAt: string;
 }
 
@@ -42,13 +42,11 @@ export default function InsuranceFormsPage() {
     const router = useRouter();
     const { isAuthenticated } = useAdmin();
 
-    // --- State Management ---
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(true);
     const [exporting, setExporting] = useState(false);
     const [error, setError] = useState('');
 
-    // Filter State
     const [filters, setFilters] = useState<InvoiceFilterParams>({
         invoiceType: '',
         startDate: '',
@@ -57,52 +55,42 @@ export default function InsuranceFormsPage() {
         buyerName: ''
     });
 
-    // Debounced Filter State 
     const debouncedFilters = useDebounce(filters, 500);
-
-    // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 10;
 
-    // --- Fetch Logic ---
     const fetchInvoices = useCallback(async () => {
         setLoading(true);
         setError('');
 
         try {
-            // Clean up filters: remove empty strings
             const activeFilters = Object.fromEntries(
                 Object.entries(debouncedFilters).filter(([_, v]) => v !== '')
             );
 
-            // Format dates to ISO strings if present
+            // Logic Updated: Use the full datetime string provided by datetime-local input
             if (activeFilters.startDate) {
                 activeFilters.startDate = new Date(activeFilters.startDate as string).toISOString();
             }
             if (activeFilters.endDate) {
-                const end = new Date(activeFilters.endDate as string);
-                end.setHours(23, 59, 59, 999); // Set to end of day
-                activeFilters.endDate = end.toISOString();
+                // If user selected a specific time, use it. 
+                // Note: If you still want to default to end-of-minute/hour when seconds aren't picked, 
+                // standard ISO conversion is usually sufficient for datetime-local
+                activeFilters.endDate = new Date(activeFilters.endDate as string).toISOString();
             }
 
             console.log("Fetching with filters:", activeFilters);
             const response = await adminApi.filterInvoices(activeFilters);
 
-            // Handle Response: Check for raw array OR standard success object
             let data: Invoice[] = [];
-
             if (Array.isArray(response.data)) {
-                // Backend returned raw array 
                 data = response.data;
             } else if (response.success && Array.isArray(response.data)) {
-                // Backend returned standard { success: true, data: [...] }
                 data = response.data;
             } else if (Array.isArray(response)) {
-                // Fallback if response itself is the array
                 data = response as any;
             }
 
-            // Sort by latest created date
             const sortedData = data.sort((a: any, b: any) =>
                 new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
@@ -117,21 +105,18 @@ export default function InsuranceFormsPage() {
         }
     }, [debouncedFilters]);
 
-    // --- Effects ---
     useEffect(() => {
         if (!isAuthenticated) {
             router.replace('/admin/login');
             return;
         }
-        // This triggers whenever debouncedFilters changes (500ms after typing stops)
         fetchInvoices();
     }, [isAuthenticated, router, fetchInvoices]);
 
-    // --- Handlers ---
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFilters(prev => ({ ...prev, [name]: value }));
-        setCurrentPage(1); // Reset to first page when filtering
+        setCurrentPage(1);
     };
 
     const handleExport = async () => {
@@ -140,11 +125,10 @@ export default function InsuranceFormsPage() {
             const body = {
                 invoiceType: filters.invoiceType || undefined,
                 startDate: filters.startDate ? new Date(filters.startDate).toISOString() : undefined,
-                endDate: filters.endDate ? new Date(new Date(filters.endDate).setHours(23, 59, 59)).toISOString() : undefined,
+                endDate: filters.endDate ? new Date(filters.endDate).toISOString() : undefined,
             };
 
             const blob = await adminApi.exportInvoices(body);
-
             if (blob) {
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -171,14 +155,12 @@ export default function InsuranceFormsPage() {
         window.open(fullUrl, '_blank');
     };
 
-    // ---Client-Side Pagination Logic ---
     const totalPages = Math.ceil(invoices.length / ITEMS_PER_PAGE);
     const paginatedInvoices = invoices.slice(
         (currentPage - 1) * ITEMS_PER_PAGE,
         currentPage * ITEMS_PER_PAGE
     );
 
-    // ---Render ---
     return (
         <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -217,20 +199,24 @@ export default function InsuranceFormsPage() {
                         <option value="BUYER_INVOICE">Buyer Invoice</option>
                     </select>
 
+                    {/* Updated to datetime-local */}
                     <input
-                        type="date"
+                        type="datetime-local"
                         name="startDate"
                         value={filters.startDate}
                         onChange={handleFilterChange}
                         className="border border-gray-300 rounded-md p-2 text-sm focus:ring-green-500 focus:border-green-500"
+                        placeholder="Start Date & Time"
                     />
 
+                    {/* Updated to datetime-local */}
                     <input
-                        type="date"
+                        type="datetime-local"
                         name="endDate"
                         value={filters.endDate}
                         onChange={handleFilterChange}
                         className="border border-gray-300 rounded-md p-2 text-sm focus:ring-green-500 focus:border-green-500"
+                        placeholder="End Date & Time"
                     />
 
                     <input

@@ -93,8 +93,9 @@ const HomePage = () => {
       billToAddress: invoice.billToAddress || [''],
       shipToName: invoice.shipToName || '',
       shipToAddress: invoice.shipToAddress || [''],
-      productName: invoice.productName?.[0] || '',
-      hsnCode: invoice.hsnCode || '',
+    productName: Array.isArray(invoice.productName) 
+      ? invoice.productName[0] || '' 
+      : invoice.productName || '',      hsnCode: invoice.hsnCode || '',
       quantity: invoice.quantity || 0,
       rate: invoice.rate || 0,
       amount: invoice.amount || 0,

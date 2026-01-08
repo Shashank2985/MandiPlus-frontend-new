@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import 'cropperjs/dist/cropper.css';
 import {
     ArrowUpIcon,
     PaperClipIcon,

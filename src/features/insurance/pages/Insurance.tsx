@@ -552,16 +552,16 @@ const Insurance = () => {
             {isCropping && imageSrc && (
                 <div className="fixed inset-0 z-50 bg-black flex flex-col">
                     <div className="flex-1 w-full relative min-h-0 bg-black">
-                        <Cropper
+                       <Cropper
                             src={imageSrc}
                             style={{ height: '100%', width: '100%' }}
                             ref={cropperRef}
                             initialAspectRatio={NaN}
                             guides={true}
-                            viewMode={1}
+                            viewMode={0}
                             dragMode="move"
                             responsive={true}
-                            autoCropArea={0.9}
+                            autoCropArea={1}
                             checkOrientation={true}
                             background={false}
                             ready={() => {
@@ -578,6 +578,8 @@ const Insurance = () => {
                             zoomOnWheel={true}
                             zoomOnTouch={true}
                             toggleDragModeOnDblclick={true}
+                            cropBoxMovable={true}
+                            cropBoxResizable={true}
                         />
                     </div>
                     <div className="w-full bg-black/90 p-4 pb-8 flex justify-between items-center px-6 shrink-0 z-50">

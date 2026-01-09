@@ -550,7 +550,7 @@ const Insurance = () => {
     const rotateImage = (degrees: number) => {
         setRotation(prev => (prev + degrees) % 360);
         if (cropperRef.current) {
-            const image = cropperRef.current.cropper.getImageData();
+            // No changes needed here, just updating the view
             cropperRef.current.cropper.rotateTo(rotation + degrees);
         }
     };
@@ -563,6 +563,7 @@ const Insurance = () => {
                 return;
             }
 
+            // getCroppedCanvas automatically returns the canvas with the rotation applied
             const canvas = cropper.getCroppedCanvas({
                 minWidth: 300,
                 minHeight: 300,
@@ -578,34 +579,10 @@ const Insurance = () => {
                 return;
             }
 
-            if (rotation !== 0) {
-                const rotatedCanvas = document.createElement('canvas');
-                const ctx = rotatedCanvas.getContext('2d');
-                if (!ctx) {
-                    resolve(null);
-                    return;
-                }
-
-                if (rotation % 180 === 0) {
-                    rotatedCanvas.width = canvas.width;
-                    rotatedCanvas.height = canvas.height;
-                } else {
-                    rotatedCanvas.width = canvas.height;
-                    rotatedCanvas.height = canvas.width;
-                }
-
-                ctx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
-                ctx.rotate((rotation * Math.PI) / 180);
-                ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
-
-                rotatedCanvas.toBlob(blob => {
-                    resolve(blob);
-                }, 'image/jpeg', 0.9);
-            } else {
-                canvas.toBlob(blob => {
-                    resolve(blob);
-                }, 'image/jpeg', 0.9);
-            }
+            // Simply convert the canvas to a blob, no manual rotation needed
+            canvas.toBlob(blob => {
+                resolve(blob);
+            }, 'image/jpeg', 0.9);
         });
     };
 
@@ -701,7 +678,7 @@ const Insurance = () => {
                             ref={cropperRef}
                             initialAspectRatio={NaN}
                             guides={true}
-                            viewMode={0}
+                            viewMode={1}
                             dragMode="move"
                             responsive={true}
                             autoCropArea={1}
@@ -714,7 +691,7 @@ const Insurance = () => {
                             minCropBoxHeight={10}
                             minCropBoxWidth={10}
                             autoCrop={true}
-                            aspectRatio={1}
+                            aspectRatio={NaN}
                             restore={false}
                             zoomable={true}
                             zoomOnWheel={true}

@@ -29,6 +29,7 @@ interface FormData {
     vehicleNumber: string;
     ownerName: string;
     cashOrCommission: string;
+    invoiceType: string;
     notes: string;
 }
 
@@ -104,6 +105,13 @@ const questions: Question[] = [
         optional: true,
         text: { en: "Cash ya Commission", hi: "नकद या कमीशन" }
     },
+    {
+        field: 'invoiceType',
+        type: 'select',
+        options: ['SUPPLIER_INVOICE', 'BUYER_INVOICE'],
+        optional: true,
+        text: { en: "Invoice Type", hi: "इनवॉइस का प्रकार" }
+    },
     { field: 'weightmentSlip', type: 'file', optional: true, text: { en: "Kanta Parchi Photo", hi: "कांटा पर्ची" } },
 ];
 
@@ -129,6 +137,7 @@ const InsuranceIOS = () => {
         vehicleNumber: '',
         ownerName: '',
         cashOrCommission: '',
+        invoiceType: 'BUYER_INVOICE',
         notes: '',
     });
 

@@ -8,7 +8,9 @@ import {
     PencilSquareIcon,
     CheckIcon,
     XMarkIcon,
-    TrashIcon
+    TrashIcon,
+    MapPinIcon,
+    ArrowPathIcon // Added for rotation
 } from '@heroicons/react/24/outline';
 import Cropper, { ReactCropperElement } from 'react-cropper';
 import "cropperjs/dist/cropper.css";
@@ -53,6 +55,30 @@ interface Message {
     field?: keyof FormData | 'language' | 'weightmentSlip';
 }
 
+// --- OSM Types ---
+interface OSMAddressDetails {
+    road?: string;
+    house_number?: string;
+    building?: string;
+    suburb?: string;
+    neighbourhood?: string;
+    residential?: string;
+    village?: string;
+    town?: string;
+    city?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+}
+
+interface OSMAddress {
+    display_name: string;
+    place_id: number;
+    lat: string;
+    lon: string;
+    address: OSMAddressDetails;
+}
+
 // --- Data: Items and HSN Codes ---
 const itemsData = [
     { name: "Tender Coconut", hsn: "08011910" },
@@ -70,7 +96,6 @@ const itemsData = [
     { name: "Potato", hsn: "07019000" },
     { name: "Ginger (Fresh)", hsn: "07030010" },
     { name: "Sweet Potato", hsn: "07142000" },
-
 ];
 
 // --- Constants ---
@@ -90,8 +115,8 @@ const questions: Question[] = [
     { field: 'buyerAddress', type: 'text', text: { en: "Party Address", hi: "पार्टी का पता" } },
     {
         field: 'itemName',
-        type: 'select', // Ensure type is select
-        options: itemsData.map(item => item.name), // Populate options from itemsData
+        type: 'select',
+        options: itemsData.map(item => item.name),
         text: { en: "Select Item", hi: "आइटम चुनें" }
     },
     { field: 'quantity', type: 'number', step: "0.01", text: { en: "Kitna Maal", hi: "कुल मात्रा/QTY" } },
@@ -100,7 +125,7 @@ const questions: Question[] = [
     { field: 'ownerName', type: 'text', text: { en: "Transporter Ka Naam", hi: "ट्रांसपोर्टर का नाम" } },
     {
         field: 'notes',
-        type: 'select', // Ensure type is select
+        type: 'select',
         options: ['Cash', 'Commission'],
         optional: true,
         text: { en: "Cash ya Commission", hi: "नकद या कमीशन" }
@@ -114,6 +139,23 @@ const questions: Question[] = [
     },
     { field: 'weightmentSlip', type: 'file', optional: true, text: { en: "Kanta Parchi Photo", hi: "कांटा पर्ची" } },
 ];
+
+// --- Debounce Hook ---
+function useDebounce<T>(value: T, delay: number): T {
+    const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+
+    return debouncedValue;
+}
 
 /* ---------------- COMPONENT ---------------- */
 
@@ -139,6 +181,7 @@ const InsuranceIOS = () => {
         cashOrCommission: '',
         invoiceType: 'BUYER_INVOICE',
         notes: '',
+        invoiceType: 'BUYER_INVOICE', // Default
     });
 
     const [weightmentSlip, setWeightmentSlip] = useState<File | null>(null);
@@ -166,6 +209,11 @@ const InsuranceIOS = () => {
     const [isCropping, setIsCropping] = useState(false);
     const cropperRef = useRef<ReactCropperElement>(null);
     const [isCropperReady, setIsCropperReady] = useState(false);
+    const [rotation, setRotation] = useState(0); // Added Rotation State
+
+    // --- Address Search State ---
+    const [addressSuggestions, setAddressSuggestions] = useState<OSMAddress[]>([]);
+    const debouncedInputValue = useDebounce(inputValue, 800);
 
     // --- Viewport Logic ---
     useEffect(() => {
@@ -220,6 +268,73 @@ const InsuranceIOS = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, currentQuestionIndex]);
 
+    // --- Address Search Effect ---
+    useEffect(() => {
+        const fetchAddresses = async () => {
+            const currentQ = questions[currentQuestionIndex];
+            if (!currentQ) return;
+
+            // Only run for address fields
+            const isAddressField = ['supplierAddress', 'buyerAddress'].includes(currentQ.field as string);
+
+            if (isAddressField && debouncedInputValue.length > 2) {
+                try {
+                    const response = await fetch(
+                        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(debouncedInputValue)}&addressdetails=1&limit=4&countrycodes=in`,
+                        {
+                            headers: {
+                                'Accept-Language': language === 'hi' ? 'hi' : 'en'
+                            }
+                        }
+                    );
+                    if (response.ok) {
+                        const data = await response.json();
+                        setAddressSuggestions(data);
+                    }
+                } catch (e) {
+                    console.error("OSM Error:", e);
+                }
+            } else {
+                setAddressSuggestions([]);
+            }
+        };
+
+        fetchAddresses();
+    }, [debouncedInputValue, currentQuestionIndex, language]);
+
+    // --- Standardization Helper ---
+    const formatOSMAddress = (details: OSMAddressDetails): string => {
+        const parts = [
+            details.house_number,
+            details.building,
+            details.road,
+            details.residential,
+            details.suburb || details.neighbourhood || details.village,
+            details.city || details.town,
+            details.state
+        ];
+
+        const uniqueParts = parts.filter((p) => p && p.trim() !== '');
+        const cleanParts = uniqueParts.filter((item, pos, arr) => {
+            return pos === 0 || item !== arr[pos - 1];
+        });
+
+        let formatted = cleanParts.join(', ');
+
+        if (details.postcode) {
+            formatted += ` - ${details.postcode}`;
+        }
+
+        const MAX_LENGTH = 120;
+        if (formatted.length > MAX_LENGTH) {
+            const pinPart = details.postcode ? ` - ${details.postcode}` : '';
+            const availableSpace = MAX_LENGTH - pinPart.length - 3;
+            formatted = formatted.substring(0, availableSpace) + '...' + pinPart;
+        }
+
+        return formatted;
+    };
+
     // --- API Submission ---
     const submitInsuranceForm = async (fileArgument: File | null = null) => {
         if (isSubmitting) return;
@@ -263,6 +378,7 @@ const InsuranceIOS = () => {
                 submitData.append('truckNumber', formData.vehicleNumber);
             }
             submitData.append('ownerName', formData.ownerName || 'Unknown Owner');
+            submitData.append('invoiceType', formData.invoiceType || 'BUYER_INVOICE'); // Added Field
 
             if (formData.hsn) submitData.append('hsnCode', formData.hsn);
             if (formData.notes) submitData.append('weighmentSlipNote', formData.notes);
@@ -306,6 +422,7 @@ const InsuranceIOS = () => {
 
         setEditingMessageIndex(messageIndex);
         setCurrentQuestionIndex(questionIndex);
+        setAddressSuggestions([]);
 
         if (fieldToEdit === 'weightmentSlip') {
             setWeightmentSlip(null);
@@ -343,6 +460,7 @@ const InsuranceIOS = () => {
 
     // Unified helper to process Input (Text or Button Click)
     const processInput = (value: string) => {
+        setAddressSuggestions([]); // Clear suggestions
         const q = questions[currentQuestionIndex];
         const currentInput = value.trim();
 
@@ -434,6 +552,13 @@ const InsuranceIOS = () => {
         processInput(opt);
     };
 
+    // Click handler for Address Suggestions
+    const handleAddressSelect = (address: OSMAddress) => {
+        const standardizedAddress = formatOSMAddress(address.address);
+        setInputValue(standardizedAddress);
+        processInput(standardizedAddress);
+    };
+
     // --- Image Handling ---
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
@@ -443,37 +568,98 @@ const InsuranceIOS = () => {
                 setImageSrc(reader.result as string);
                 setIsCropping(true);
                 setIsCropperReady(false);
+                setRotation(0); // Reset Rotation
                 if (fileInputRef.current) fileInputRef.current.value = '';
             };
             reader.readAsDataURL(file);
         }
     };
 
-    const handleCropComplete = () => {
-        const cropper = cropperRef.current?.cropper;
-        if (!cropper) return;
-        const canvas = cropper.getCroppedCanvas();
-        if (!canvas) return;
+    // --- Added Rotation Helper ---
+    const rotateImage = (degrees: number) => {
+        setRotation(prev => (prev + degrees) % 360);
+        if (cropperRef.current) {
+            cropperRef.current.cropper.rotateTo(rotation + degrees);
+        }
+    };
 
-        canvas.toBlob(async (blob: Blob | null) => {
-            if (!blob) return;
-            const croppedFile = new File([blob], 'cropped-image.jpg', { type: 'image/jpeg' });
-            setWeightmentSlip(croppedFile);
-            setIsCropping(false);
-
-            if (editingMessageIndex !== null) {
-                setMessages(prev => {
-                    const newMsgs = [...prev];
-                    newMsgs[editingMessageIndex!] = {
-                        ...newMsgs[editingMessageIndex!],
-                        text: `📎 ${croppedFile.name} (Edited)`
-                    };
-                    return newMsgs;
-                });
-                setEditingMessageIndex(null);
-                if (resumeQuestionIndex !== null) setCurrentQuestionIndex(resumeQuestionIndex);
+    // --- Added getCroppedImage Helper (Canvas Logic) ---
+    const getCroppedImage = (): Promise<Blob | null> => {
+        return new Promise((resolve) => {
+            const cropper = cropperRef.current?.cropper;
+            if (!cropper) {
+                resolve(null);
+                return;
             }
-        }, 'image/jpeg');
+
+            const canvas = cropper.getCroppedCanvas({
+                minWidth: 300,
+                minHeight: 300,
+                maxWidth: 4096,
+                maxHeight: 4096,
+                fillColor: '#fff',
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high',
+            });
+
+            if (!canvas) {
+                resolve(null);
+                return;
+            }
+
+            // Apply rotation if any
+            if (rotation !== 0) {
+                const rotatedCanvas = document.createElement('canvas');
+                const ctx = rotatedCanvas.getContext('2d');
+                if (!ctx) {
+                    resolve(null);
+                    return;
+                }
+
+                if (rotation % 180 === 0) {
+                    rotatedCanvas.width = canvas.width;
+                    rotatedCanvas.height = canvas.height;
+                } else {
+                    rotatedCanvas.width = canvas.height;
+                    rotatedCanvas.height = canvas.width;
+                }
+
+                ctx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
+                ctx.rotate((rotation * Math.PI) / 180);
+                ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+
+                rotatedCanvas.toBlob(blob => {
+                    resolve(blob);
+                }, 'image/jpeg', 0.9);
+            } else {
+                canvas.toBlob(blob => {
+                    resolve(blob);
+                }, 'image/jpeg', 0.9);
+            }
+        });
+    };
+
+    const handleCropComplete = async () => {
+        const blob = await getCroppedImage();
+        if (!blob) return;
+
+        const croppedFile = new File([blob], 'cropped-image.jpg', { type: 'image/jpeg' });
+        setWeightmentSlip(croppedFile);
+        setIsCropping(false);
+        setRotation(0);
+
+        if (editingMessageIndex !== null) {
+            setMessages(prev => {
+                const newMsgs = [...prev];
+                newMsgs[editingMessageIndex!] = {
+                    ...newMsgs[editingMessageIndex!],
+                    text: `📎 ${croppedFile.name} (Edited)`
+                };
+                return newMsgs;
+            });
+            setEditingMessageIndex(null);
+            if (resumeQuestionIndex !== null) setCurrentQuestionIndex(resumeQuestionIndex);
+        }
     };
 
     const handleFileSubmit = async () => {
@@ -548,28 +734,52 @@ const InsuranceIOS = () => {
                             minCropBoxWidth={10}
                         />
                     </div>
+                    {/* Bottom Toolbar with Rotation Buttons */}
                     <div className="w-full bg-black/90 p-4 pb-8 flex justify-between items-center px-6 shrink-0 z-50">
-                        <button
-                            type="button"
-                            onClick={() => { setIsCropping(false); setImageSrc(null); setWeightmentSlip(null); }}
-                            className="flex flex-col items-center text-red-500 gap-1"
-                        >
-                            <div className="p-2 rounded-full bg-gray-800 hover:bg-gray-700">
-                                <XMarkIcon className="w-6 h-6" />
-                            </div>
-                            <span className="text-xs">Cancel</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleCropComplete}
-                            disabled={!isCropperReady}
-                            className={`flex flex-col items-center gap-1 transition-opacity ${isCropperReady ? 'opacity-100 text-[#25D366]' : 'opacity-50 text-gray-500'}`}
-                        >
-                            <div className={`p-2 rounded-full bg-gray-800 border ${isCropperReady ? 'border-[#25D366]' : 'border-gray-500'} hover:bg-gray-700`}>
-                                <CheckIcon className="w-6 h-6" />
-                            </div>
-                            <span className="text-xs">Done</span>
-                        </button>
+                        {/* Rotation Buttons */}
+                        <div className="flex items-center gap-4">
+                            <button
+                                type="button"
+                                onClick={() => rotateImage(-90)}
+                                className="flex flex-col items-center text-white gap-1"
+                            >
+                                <ArrowPathIcon className="w-5 h-5 transform rotate-90" />
+                                <span className="text-[10px]">Left</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => rotateImage(90)}
+                                className="flex flex-col items-center text-white gap-1"
+                            >
+                                <ArrowPathIcon className="w-5 h-5 -scale-x-100 transform rotate-90" />
+                                <span className="text-[10px]">Right</span>
+                            </button>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-6">
+                            <button
+                                type="button"
+                                onClick={() => { setIsCropping(false); setImageSrc(null); setWeightmentSlip(null); setRotation(0); }}
+                                className="flex flex-col items-center text-red-500 gap-1"
+                            >
+                                <div className="p-1 rounded-full bg-gray-800 hover:bg-gray-700">
+                                    <XMarkIcon className="w-5 h-5" />
+                                </div>
+                                <span className="text-[10px]">Cancel</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCropComplete}
+                                disabled={!isCropperReady}
+                                className={`flex flex-col items-center gap-1 transition-opacity ${isCropperReady ? 'opacity-100 text-[#25D366]' : 'opacity-50 text-gray-500'}`}
+                            >
+                                <div className={`p-1 rounded-full bg-gray-800 border ${isCropperReady ? 'border-[#25D366]' : 'border-gray-500'} hover:bg-gray-700`}>
+                                    <CheckIcon className="w-5 h-5" />
+                                </div>
+                                <span className="text-[10px]">Done</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -616,7 +826,6 @@ const InsuranceIOS = () => {
                 ))}
 
                 {/* --- RENDER DROPDOWN OPTIONS IN CHAT --- */}
-                {/* Shows buttons for Item Name and Cash/Commission */}
                 {isSelectInput && !isSubmitting && !editingMessageIndex && currentQuestion.options && (
                     <div className="flex justify-start w-full animate-in fade-in slide-in-from-bottom-2">
                         <div className="w-[85%] sm:w-[75%]">
@@ -641,8 +850,31 @@ const InsuranceIOS = () => {
                 <div ref={messagesEndRef} />
             </div>
 
+            {/* Address Suggestions Floating Above Input */}
+            {addressSuggestions.length > 0 && (
+                <div className="bg-white border-t border-gray-200 shadow-lg z-20 max-h-40 overflow-y-auto">
+                    <div className="p-2 space-y-1">
+                        <p className="px-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            {language === 'hi' ? 'सुझाव' : 'Suggestions'}
+                        </p>
+                        {addressSuggestions.map((addr) => (
+                            <button
+                                key={addr.place_id}
+                                onClick={() => handleAddressSelect(addr)}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg flex items-start gap-2 transition-colors"
+                            >
+                                <MapPinIcon className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-medium text-gray-800 line-clamp-1">{formatOSMAddress(addr.address)}</span>
+                                    <span className="text-[10px] text-gray-500 line-clamp-1">{addr.display_name}</span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* INPUT AREA */}
-            {/* Hidden if we are showing select buttons (unless editing) */}
             {(!isSelectInput || editingMessageIndex !== null) && (
                 <div
                     className="border-t bg-[#f0f0f0] p-2 flex-none"

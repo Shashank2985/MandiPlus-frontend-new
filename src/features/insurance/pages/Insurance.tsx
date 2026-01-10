@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import 'cropperjs/dist/cropper.css';
 import {
     ArrowUpIcon,
     PaperClipIcon,
@@ -9,7 +10,8 @@ import {
     CheckIcon,
     XMarkIcon,
     TrashIcon,
-    ArrowPathIcon
+    ArrowPathIcon,
+    MapPinIcon
 } from '@heroicons/react/24/outline';
 import Cropper, { ReactCropperElement } from 'react-cropper';
 
@@ -51,6 +53,29 @@ interface Message {
     text: string;
     sender: 'bot' | 'user';
     field?: keyof FormData | 'language' | 'weightmentSlip';
+}
+
+interface OSMAddressDetails {
+    road?: string;
+    house_number?: string;
+    building?: string;
+    suburb?: string;
+    neighbourhood?: string;
+    residential?: string;
+    village?: string;
+    town?: string;
+    city?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+}
+
+interface OSMAddress {
+    display_name: string;
+    place_id: number;
+    lat: string;
+    lon: string;
+    address: OSMAddressDetails;
 }
 
 // --- Data ---
@@ -113,6 +138,22 @@ const questions: Question[] = [
     { field: 'weightmentSlip', type: 'file', optional: true, text: { en: "Kanta Parchi Photo", hi: "कांटा पर्ची" } },
 ];
 
+function useDebounce<T>(value: T, delay: number): T {
+    const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+
+    return debouncedValue;
+}
+
 const Insurance = () => {
     const router = useRouter();
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -157,6 +198,10 @@ const Insurance = () => {
     const [isCropperReady, setIsCropperReady] = useState(false);
     const [rotation, setRotation] = useState(0);
 
+    // --- Address Search State ---
+    const [addressSuggestions, setAddressSuggestions] = useState<OSMAddress[]>([]);
+    const debouncedInputValue = useDebounce(inputValue, 800);
+
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const updateHeight = () => {
@@ -177,6 +222,92 @@ const Insurance = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, currentQuestionIndex]);
 
+    // --- Address Search Effect ---
+    useEffect(() => {
+        const fetchAddresses = async () => {
+            const currentQ = questions[currentQuestionIndex];
+            if (!currentQ) return;
+
+            const isAddressField = ['supplierAddress', 'buyerAddress'].includes(currentQ.field as string);
+
+            if (isAddressField && debouncedInputValue.length > 2) {
+                try {
+                    const response = await fetch(
+                        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(debouncedInputValue)}&addressdetails=1&limit=4&countrycodes=in`,
+                        {
+                            headers: {
+                                'Accept-Language': language === 'hi' ? 'hi' : 'en'
+                            }
+                        }
+                    );
+                    if (response.ok) {
+                        const data = await response.json();
+                        setAddressSuggestions(data);
+                    }
+                } catch (e) {
+                    console.error("OSM Error:", e);
+                }
+            } else {
+                setAddressSuggestions([]);
+            }
+        };
+
+        fetchAddresses();
+    }, [debouncedInputValue, currentQuestionIndex, language]);
+
+    // --- Helper: Clean Text to prevent DB Encoding Issues ---
+    const sanitizeText = (text: string): string => {
+        // Remove emoji and non-standard symbols that might break latin1 databases
+        // Keeps letters (all languages), numbers, standard punctuation, and spaces
+        return text.replace(/[^\p{L}\p{N}\s,.-]/gu, "").trim();
+    };
+
+    // --- Updated Address Formatter (Safe & Standardized) ---
+    const formatOSMAddress = (details: OSMAddressDetails): string => {
+        const parts = [
+            details.house_number,
+            details.building,
+            details.road,
+            details.residential,
+            details.suburb || details.neighbourhood || details.village,
+            details.city || details.town,
+            details.state
+        ];
+
+        // 1. Filter empty parts
+        const uniqueParts = parts.filter((p) => p && p.trim() !== '');
+
+        // 2. Remove duplicates (e.g., if City and District are same)
+        const cleanParts = uniqueParts.filter((item, pos, arr) => {
+            return pos === 0 || item !== arr[pos - 1];
+        });
+
+        // 3. Join parts
+        let formatted = cleanParts.join(', ');
+
+        // 4. Append PIN Code
+        if (details.postcode) {
+            formatted += ` - ${details.postcode}`;
+        }
+
+        // 5. Sanitize (Remove weird symbols that cause garbage text)
+        formatted = sanitizeText(formatted);
+
+        // 6. Safe Truncation (Max 100 chars to be safe for most DB columns)
+        // We cut from the middle to keep the specific location (start) and PIN/State (end)
+        const MAX_LENGTH = 100;
+        if (formatted.length > MAX_LENGTH) {
+            const pinPart = details.postcode ? ` - ${details.postcode}` : '';
+            // Safe length calculation
+            const availableStart = Math.floor(MAX_LENGTH * 0.6); // Keep first 60%
+            const startStr = formatted.substring(0, availableStart);
+
+            formatted = `${startStr}...${pinPart}`;
+        }
+
+        return formatted;
+    };
+
     const submitInsuranceForm = async (fileArgument: File | null = null) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
@@ -193,18 +324,26 @@ const Insurance = () => {
             }
 
             submitData.append('invoiceDate', new Date().toISOString());
-            submitData.append('placeOfSupply', formData.supplierAddress || 'State');
-            const supAddr = formData.supplierAddress || 'Unknown Address';
+
+            // Clean addresses before sending
+            const supAddr = sanitizeText(formData.supplierAddress || 'Unknown Address');
+            const buyAddr = sanitizeText(formData.buyerAddress || 'Unknown Address');
+            const placeSupply = sanitizeText(formData.supplierAddress || 'State');
+
+            submitData.append('placeOfSupply', placeSupply);
             submitData.append('supplierAddress[]', supAddr);
-            const buyAddr = formData.buyerAddress || 'Unknown Address';
             submitData.append('billToAddress[]', buyAddr);
             submitData.append('shipToAddress[]', buyAddr);
 
-            const prodName = formData.itemName || 'Item';
+            const prodName = sanitizeText(formData.itemName || 'Item');
             submitData.append('productName', prodName);
-            submitData.append('supplierName', formData.supplierName || 'Unknown Supplier');
-            submitData.append('billToName', formData.buyerName || 'Unknown Buyer');
-            submitData.append('shipToName', formData.buyerName || 'Unknown Buyer');
+
+            const supName = sanitizeText(formData.supplierName || 'Unknown Supplier');
+            submitData.append('supplierName', supName);
+
+            const buyName = sanitizeText(formData.buyerName || 'Unknown Buyer');
+            submitData.append('billToName', buyName);
+            submitData.append('shipToName', buyName);
 
             const qty = formData.quantity ? Number(formData.quantity) : 0;
             const rate = formData.rate ? Number(formData.rate) : 0;
@@ -215,13 +354,17 @@ const Insurance = () => {
             submitData.append('amount', String(amount));
 
             if (formData.vehicleNumber) {
-                submitData.append('vehicleNumber', formData.vehicleNumber);
-                submitData.append('truckNumber', formData.vehicleNumber);
+                const vehicle = sanitizeText(formData.vehicleNumber);
+                submitData.append('vehicleNumber', vehicle);
+                submitData.append('truckNumber', vehicle);
             }
-            submitData.append('ownerName', formData.ownerName || 'Unknown Owner');
+
+            const owner = sanitizeText(formData.ownerName || 'Unknown Owner');
+            submitData.append('ownerName', owner);
             submitData.append('invoiceType', formData.invoiceType || 'BUYER_INVOICE');
+
             if (formData.hsn) submitData.append('hsnCode', formData.hsn);
-            if (formData.notes) submitData.append('weighmentSlipNote', formData.notes);
+            if (formData.notes) submitData.append('weighmentSlipNote', sanitizeText(formData.notes));
 
             const finalFile = fileArgument || weightmentSlip;
             if (finalFile) {
@@ -261,6 +404,7 @@ const Insurance = () => {
 
         setEditingMessageIndex(messageIndex);
         setCurrentQuestionIndex(questionIndex);
+        setAddressSuggestions([]);
 
         if (fieldToEdit === 'weightmentSlip') {
             setWeightmentSlip(null);
@@ -297,8 +441,8 @@ const Insurance = () => {
         }
     };
 
-    // New helper to process all inputs (text or buttons)
     const processInput = (value: string) => {
+        setAddressSuggestions([]);
         const q = questions[currentQuestionIndex];
         const currentInput = value.trim();
 
@@ -379,9 +523,14 @@ const Insurance = () => {
         processInput(inputValue);
     };
 
-    // Click handler for in-chat options
     const handleOptionSelect = (opt: string) => {
         processInput(opt);
+    };
+
+    const handleAddressSelect = (address: OSMAddress) => {
+        const standardizedAddress = formatOSMAddress(address.address);
+        setInputValue(standardizedAddress);
+        processInput(standardizedAddress);
     };
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -401,7 +550,7 @@ const Insurance = () => {
     const rotateImage = (degrees: number) => {
         setRotation(prev => (prev + degrees) % 360);
         if (cropperRef.current) {
-            const image = cropperRef.current.cropper.getImageData();
+            // No changes needed here, just updating the view
             cropperRef.current.cropper.rotateTo(rotation + degrees);
         }
     };
@@ -414,6 +563,7 @@ const Insurance = () => {
                 return;
             }
 
+            // getCroppedCanvas automatically returns the canvas with the rotation applied
             const canvas = cropper.getCroppedCanvas({
                 minWidth: 300,
                 minHeight: 300,
@@ -429,39 +579,10 @@ const Insurance = () => {
                 return;
             }
 
-            // Apply rotation if any
-            if (rotation !== 0) {
-                const rotatedCanvas = document.createElement('canvas');
-                const ctx = rotatedCanvas.getContext('2d');
-                if (!ctx) {
-                    resolve(null);
-                    return;
-                }
-
-                // Set canvas size to fit rotated image
-                if (rotation % 180 === 0) {
-                    rotatedCanvas.width = canvas.width;
-                    rotatedCanvas.height = canvas.height;
-                } else {
-                    rotatedCanvas.width = canvas.height;
-                    rotatedCanvas.height = canvas.width;
-                }
-
-                // Move to center, rotate, then draw
-                ctx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
-                ctx.rotate((rotation * Math.PI) / 180);
-                ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
-
-                // Use the rotated canvas
-                rotatedCanvas.toBlob(blob => {
-                    resolve(blob);
-                }, 'image/jpeg', 0.9);
-            } else {
-                // No rotation needed, use original canvas
-                canvas.toBlob(blob => {
-                    resolve(blob);
-                }, 'image/jpeg', 0.9);
-            }
+            // Simply convert the canvas to a blob, no manual rotation needed
+            canvas.toBlob(blob => {
+                resolve(blob);
+            }, 'image/jpeg', 0.9);
         });
     };
 
@@ -472,7 +593,7 @@ const Insurance = () => {
         const croppedFile = new File([blob], 'cropped-image.jpg', { type: 'image/jpeg' });
         setWeightmentSlip(croppedFile);
         setIsCropping(false);
-        setRotation(0); // Reset rotation for next use
+        setRotation(0);
 
         if (editingMessageIndex !== null) {
             setMessages(prev => {
@@ -517,7 +638,7 @@ const Insurance = () => {
             className="flex flex-col bg-[#efeae2] overflow-hidden fixed inset-0"
             style={{ height: viewportHeight } as React.CSSProperties}
         >
-            {/* Enhanced Header */}
+            {/* Header */}
             <div className="bg-gradient-to-r from-[#075E54] to-[#128C7E] text-white px-4 py-4 flex items-center justify-between shadow-lg z-10 shrink-0">
                 <div className="flex items-center gap-3">
                     <button
@@ -560,23 +681,24 @@ const Insurance = () => {
                             viewMode={1}
                             dragMode="move"
                             responsive={true}
-                            autoCropArea={0.9}
+                            autoCropArea={1}
                             checkOrientation={true}
                             background={false}
                             ready={() => {
                                 setIsCropperReady(true);
-                                // Reset rotation when a new image is loaded
                                 setRotation(0);
                             }}
                             minCropBoxHeight={10}
                             minCropBoxWidth={10}
                             autoCrop={true}
-                            aspectRatio={1}
+                            aspectRatio={NaN}
                             restore={false}
                             zoomable={true}
                             zoomOnWheel={true}
                             zoomOnTouch={true}
                             toggleDragModeOnDblclick={true}
+                            cropBoxMovable={true}
+                            cropBoxResizable={true}
                         />
                     </div>
                     <div className="w-full bg-black/90 p-4 pb-8 flex justify-between items-center px-6 shrink-0 z-50">
@@ -637,7 +759,7 @@ const Insurance = () => {
                 </div>
             )}
 
-            {/* Enhanced Chat Area */}
+            {/* Chat Area */}
             <div
                 ref={chatContainerRef}
                 className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4 relative scroll-smooth"
@@ -691,7 +813,6 @@ const Insurance = () => {
                     </div>
                 ))}
 
-                {/* --- Enhanced Dropdown Options --- */}
                 {isSelectInput && !isSubmitting && !editingMessageIndex && currentQuestion.options && (
                     <div className="flex justify-start w-full animate-fadeIn">
                         <div className="w-[80%] sm:w-[75%] bg-white rounded-2xl p-4 shadow-lg border-2 border-gray-100">
@@ -719,7 +840,31 @@ const Insurance = () => {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Enhanced Input Bar */}
+            {/* Address Suggestions */}
+            {addressSuggestions.length > 0 && (
+                <div className="bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20 max-h-48 overflow-y-auto">
+                    <div className="p-2 space-y-1">
+                        <p className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            {language === 'hi' ? 'सुझाव (Suggestions)' : 'Address Suggestions'}
+                        </p>
+                        {addressSuggestions.map((addr) => (
+                            <button
+                                key={addr.place_id}
+                                onClick={() => handleAddressSelect(addr)}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded-lg flex items-start gap-2 transition-colors"
+                            >
+                                <MapPinIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-medium text-gray-800">{formatOSMAddress(addr.address)}</span>
+                                    <span className="text-xs text-gray-500 line-clamp-1">{addr.display_name}</span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Input Bar */}
             {(!isSelectInput || editingMessageIndex !== null) && (
                 <div className="bg-gradient-to-t from-[#f0f0f0] to-[#f5f5f5] px-4 py-3 border-t border-gray-300 shadow-lg z-10 shrink-0">
                     {error && (

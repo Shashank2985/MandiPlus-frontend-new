@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "../auth/components/ProtectedRoute";
-import { getMyInsuranceForms, regenerateInvoice, InsuranceForm, RegenerateInvoicePayload } from "../insurance/api";
+import { getMyInsuranceForms, regenerateInvoice, InsuranceForm, RegenerateInvoicePayload, uploadWeighmentSlips, updateInvoice } from "../insurance/api";
+import 'cropperjs/dist/cropper.css';
+import Cropper, { ReactCropperElement } from "react-cropper";
+import { ArrowPathIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000/";
 
@@ -22,6 +25,15 @@ const HomePage = () => {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InsuranceForm | null>(null);
   const [showRegenerateForm, setShowRegenerateForm] = useState(false);
+
+  // --- NEW: Cropper & File State ---
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cropperRef = useRef<ReactCropperElement>(null);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [isCropping, setIsCropping] = useState(false);
+  const [isCropperReady, setIsCropperReady] = useState(false);
+  const [rotation, setRotation] = useState(0);
+  const [weightmentSlip, setWeightmentSlip] = useState<File | null>(null);
 
   // Regenerate form states
   const [formData, setFormData] = useState<RegenerateInvoicePayload>({
@@ -84,8 +96,44 @@ const HomePage = () => {
     fetchInvoices();
   };
 
+  // --- NEW: Cropper Helper Functions ---
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImageSrc(reader.result as string);
+        setIsCropping(true);
+        setIsCropperReady(false);
+        setRotation(0);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    }
+  };
+
+  const rotateImage = (degrees: number) => {
+    setRotation(prev => (prev + degrees) % 360);
+    cropperRef.current?.cropper.rotateTo(rotation + degrees);
+  };
+
+  const handleCropComplete = () => {
+    const cropper = cropperRef.current?.cropper;
+    if (!cropper) return;
+    cropper.getCroppedCanvas({
+      minWidth: 300, minHeight: 300, maxWidth: 4096, maxHeight: 4096,
+      fillColor: '#fff', imageSmoothingEnabled: true, imageSmoothingQuality: 'high',
+    }).toBlob(blob => {
+      if (blob) {
+        setWeightmentSlip(new File([blob], 'updated-weightment-slip.jpg', { type: 'image/jpeg' }));
+        setIsCropping(false);
+        setImageSrc(null);
+      }
+    }, 'image/jpeg', 0.9);
+  };
+
   const handleEditInvoice = (invoice: InsuranceForm) => {
     setSelectedInvoice(invoice);
+    setWeightmentSlip(null); // Reset file
     setFormData({
       invoiceId: invoice.id,
       supplierName: invoice.supplierName,
@@ -95,9 +143,9 @@ const HomePage = () => {
       billToAddress: invoice.billToAddress || [''],
       shipToName: invoice.shipToName || '',
       shipToAddress: invoice.shipToAddress || [''],
-    productName: Array.isArray(invoice.productName) 
-      ? invoice.productName[0] || '' 
-      : invoice.productName || '',      hsnCode: invoice.hsnCode || '',
+      productName: Array.isArray(invoice.productName)
+        ? invoice.productName[0] || ''
+        : invoice.productName || '', hsnCode: invoice.hsnCode || '',
       quantity: invoice.quantity || 0,
       rate: invoice.rate || 0,
       amount: invoice.amount || 0,
@@ -110,6 +158,7 @@ const HomePage = () => {
     setShowRegenerateForm(true);
   };
 
+// --- NEW: Updated Submit Logic ---
 const handleRegenerateSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   if (!selectedInvoice) return;
@@ -118,80 +167,50 @@ const handleRegenerateSubmit = async (e: React.FormEvent) => {
   setError(null);
 
   try {
-    const { invoiceId, ...formDataWithoutId } = formData;
-    // Ensure all address fields are properly typed as string arrays
-    const supplierAddress = Array.isArray(formData.supplierAddress)
-      ? formData.supplierAddress.filter((addr): addr is string => typeof addr === 'string')
-      : [String(formData.supplierAddress || '')];
+    // 1. Upload Image if exists
+    if (weightmentSlip) {
+      await uploadWeighmentSlips(selectedInvoice.id, [weightmentSlip]);
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for PDF generation
+    }
 
-    const billToAddress = Array.isArray(formData.billToAddress)
-      ? formData.billToAddress.filter((addr): addr is string => typeof addr === 'string')
-      : [String(formData.billToAddress || '')];
+    // 2. Prepare FormData
+    const payload = new FormData();
+    const append = (key: string, value: any) => payload.append(key, String(value ?? ''));
 
-    const shipToAddress = formData.shipToAddress
-      ? (Array.isArray(formData.shipToAddress)
-        ? formData.shipToAddress.filter((addr): addr is string => typeof addr === 'string')
-        : [String(formData.shipToAddress)])
-      : [''];
+    append('invoiceType', formData.invoiceType);
+    append('invoiceDate', formData.invoiceDate);
+    append('supplierName', formData.supplierName);
+    append('placeOfSupply', formData.placeOfSupply);
+    append('billToName', formData.billToName);
+    append('shipToName', formData.shipToName);
+    append('hsnCode', formData.hsnCode);
+    append('vehicleNumber', formData.vehicleNumber);
+    append('truckNumber', formData.truckNumber);
+    append('weighmentSlipNote', formData.weighmentSlipNote);
+    append('productName', formData.productName);
+    append('quantity', formData.quantity);
+    append('rate', formData.rate);
+    append('amount', (Number(formData.quantity) || 0) * (Number(formData.rate) || 0));
 
-    const payload: RegenerateInvoicePayload = {
-      ...formDataWithoutId,
-      invoiceId: selectedInvoice.id,
-      productName: formData.productName || '',
-      supplierAddress,
-      billToAddress,
-      shipToAddress,
-      amount: (formData.quantity || 0) * (formData.rate || 0),
+    const processArray = (key: string, arr: any) => {
+      const valid = Array.isArray(arr) ? arr.filter(x => typeof x === 'string') : [String(arr || '')];
+      valid.forEach(v => payload.append(key, v));
     };
+    processArray('supplierAddress', formData.supplierAddress);
+    processArray('billToAddress', formData.billToAddress);
+    processArray('shipToAddress', formData.shipToAddress);
 
-    const updatedInvoice = await regenerateInvoice(payload);
+    // 3. Update Text
+    await updateInvoice(selectedInvoice.id, payload);
 
-    // Success feedback
-    alert('✅ Invoice updated successfully! PDF is being regenerated...');
+    // 4. Final Wait & Refresh
+    const fresh = await getMyInsuranceForms();
+    setInvoices(fresh);
 
-    // Close modal first
+    alert('✅ Invoice updated successfully!');
     setShowRegenerateForm(false);
     setSelectedInvoice(null);
-
-    // Poll for updated invoice with new PDF URL (maximum 10 attempts, 2 seconds apart)
-    let attempts = 0;
-    const maxAttempts = 1;
-    const pollInterval = 5000; // 5 seconds
-
-    const pollForUpdate = async () => {
-      attempts++;
-      
-      try {
-        // Fetch fresh invoice data from API
-        const response = await fetch(`${API_BASE_URL}/invoices/${updatedInvoice.id}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const freshInvoice = await response.json();
-          
-          // Update local state with fresh data
-          setInvoices(prev =>
-            prev.map(inv => inv.id === freshInvoice.id ? freshInvoice : inv)
-          );
-
-          console.log('✅ Invoice refreshed with updated PDF');
-        }
-      } catch (error) {
-        console.error('Error polling invoice:', error);
-      }
-
-      // Continue polling if not reached max attempts
-      if (attempts < maxAttempts) {
-        setTimeout(pollForUpdate, pollInterval);
-      }
-    };
-
-    // Start polling after 2 seconds
-    setTimeout(pollForUpdate, pollInterval);
+    setWeightmentSlip(null);
 
   } catch (err: any) {
     const errorMsg = Array.isArray(err.message)
@@ -220,6 +239,30 @@ const handleRegenerateSubmit = async (e: React.FormEvent) => {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-[#e0d7fc] pb-28">
+
+        {/* --- NEW: Cropper Overlay --- */}
+        {isCropping && imageSrc && (
+          <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+            <div className="flex-1 w-full relative min-h-0 bg-black">
+              <Cropper
+                src={imageSrc} style={{ height: '100%', width: '100%' }} ref={cropperRef}
+                guides={true} viewMode={1} dragMode="move" autoCropArea={1} checkOrientation={true}
+                ready={() => { setIsCropperReady(true); setRotation(0); }}
+              />
+            </div>
+            <div className="w-full bg-black/90 p-4 flex justify-between items-center px-6 z-50 border-t border-gray-800">
+              <div className="flex gap-4 text-white">
+                <button type="button" onClick={() => rotateImage(-90)}><ArrowPathIcon className="w-6 h-6 transform rotate-90" /></button>
+                <button type="button" onClick={() => rotateImage(90)}><ArrowPathIcon className="w-6 h-6 -scale-x-100 transform rotate-90" /></button>
+              </div>
+              <div className="flex gap-6">
+                <button type="button" onClick={() => { setIsCropping(false); setImageSrc(null); }} className="text-red-500"><XMarkIcon className="w-8 h-8" /></button>
+                <button type="button" onClick={handleCropComplete} disabled={!isCropperReady} className={isCropperReady ? 'text-[#25D366]' : 'text-gray-500'}><CheckIcon className="w-8 h-8" /></button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* HEADER */}
         <div className="bg-white text-black px-5 py-4 rounded-b-4xl">
           <div className="flex items-center justify-between">
@@ -363,7 +406,7 @@ const handleRegenerateSubmit = async (e: React.FormEvent) => {
                         <div className="flex gap-2">
                           {invoice.pdfUrl && (
                             <a
-                              href={invoice.pdfUrl}
+                              href={`${invoice.pdfUrl}?t=${Date.now()}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-200 text-center"
@@ -398,6 +441,7 @@ const handleRegenerateSubmit = async (e: React.FormEvent) => {
                     setShowRegenerateForm(false);
                     setSelectedInvoice(null);
                     setError(null);
+                    setWeightmentSlip(null);
                   }}
                   className="text-gray-500 hover:text-gray-700"
                 >
@@ -411,6 +455,22 @@ const handleRegenerateSubmit = async (e: React.FormEvent) => {
                     {error}
                   </div>
                 )}
+
+                {/* --- NEW: Image Upload Section --- */}
+                <div className="border border-gray-300 rounded-xl p-4">
+                  <label className="block text-sm font-medium text-slate-800 mb-2">Upload Weighment Slip</label>
+                  <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                  <div className="flex flex-col gap-3">
+                    {weightmentSlip ? (
+                      <div className="text-green-700 text-sm bg-green-50 p-2 rounded">{weightmentSlip.name}</div>
+                    ) : (
+                      <div className="text-gray-500 text-sm text-center">No new slip selected</div>
+                    )}
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200">
+                      📸 {weightmentSlip ? 'Replace Photo' : 'Upload New Photo'}
+                    </button>
+                  </div>
+                </div>
 
                 <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-600">
                   Invoice: <span className="font-semibold">{selectedInvoice.invoiceNumber}</span>
@@ -617,6 +677,7 @@ const handleRegenerateSubmit = async (e: React.FormEvent) => {
                       setShowRegenerateForm(false);
                       setSelectedInvoice(null);
                       setError(null);
+                      setWeightmentSlip(null);
                     }}
                     className="flex-1 px-4 py-3 border border-gray-300 rounded-xl font-medium text-gray-700 hover:bg-gray-50"
                     disabled={regenerating}

@@ -31,11 +31,13 @@ export interface InsuranceForm {
   vehicleNumber?: string;
   truckNumber?: string;
   weighmentSlipNote?: string;
+  weighmentSlipUrls?: string[];
   isClaim?: boolean;
   claimDetails?: string;
   pdfUrl?: string;
   pdfURL?: string;
   createdAt?: string;
+  invoiceType?: "SUPPLIER_INVOICE" | "BUYER_INVOICE";
 }
 
 // ✅ NEW: Type for regenerating invoice
@@ -144,12 +146,6 @@ export const regenerateInvoice = async (
     const token = localStorage.getItem("accessToken");
 
     if (!token) {
-      throw new Error("Authentication iffff required. Please log in.");
-    }
-
-    console.log("Regenerating invoice with payload:", token);
-
-    if (!token) {
       throw new Error("Authentication required. Please log in.");
     }
 
@@ -182,6 +178,46 @@ export const regenerateInvoice = async (
 };
 
 /**
+ * ✅ NEW: Upload Weighment Slips
+ * POST /invoices/:id/weighment-slips
+ */
+export const uploadWeighmentSlips = async (
+  invoiceId: string,
+  files: File[]
+): Promise<InsuranceForm> => {
+  try {
+    const token = localStorage.getItem("accessToken");
+    if (!token) {
+      throw new Error("Authentication required");
+    }
+
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("weighmentSlips", file);
+    });
+
+    const response = await axios.post(
+      `${API_BASE_URL}/invoices/${invoiceId}/weighment-slips`,
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    const err = error as AxiosError<ApiError>;
+    const message =
+      err.response?.data?.message || err.message || "Failed to upload files";
+    const errorMessage = Array.isArray(message) ? message.join(", ") : message;
+    throw new Error(errorMessage);
+  }
+};
+
+/**
  * ✅ BONUS: Get single invoice by ID
  * GET /invoices/:id
  */
@@ -200,5 +236,40 @@ export const getInvoiceById = async (
   } catch (error) {
     const err = error as AxiosError<ApiError>;
     throw err.response?.data || { message: "Failed to fetch invoice" };
+  }
+};
+
+/**
+ * ✅ ATOMIC UPDATE: Updates text AND uploads file in one go
+ * PATCH /invoices/:id
+ */
+export const updateInvoice = async (
+  invoiceId: string,
+  formData: FormData
+): Promise<InsuranceForm> => {
+  try {
+    const token = localStorage.getItem("accessToken");
+    if (!token) {
+      throw new Error("Authentication required");
+    }
+
+    const response = await axios.patch(
+      `${API_BASE_URL}/invoices/${invoiceId}`,
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    const err = error as AxiosError<ApiError>;
+    const message =
+      err.response?.data?.message || err.message || "Failed to update invoice";
+    const errorMessage = Array.isArray(message) ? message.join(", ") : message;
+    throw new Error(errorMessage);
   }
 };

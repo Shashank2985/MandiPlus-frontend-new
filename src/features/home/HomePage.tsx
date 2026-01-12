@@ -165,6 +165,79 @@ const HomePage = () => {
 
     setRegenerating(true);
     setError(null);
+const handleRegenerateSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!selectedInvoice) return;
+
+  setRegenerating(true);
+  setError(null);
+
+  try {
+    const { invoiceId, ...formDataWithoutId } = formData;
+    // Ensure all address fields are properly typed as string arrays
+    const supplierAddress = Array.isArray(formData.supplierAddress)
+      ? formData.supplierAddress.filter((addr): addr is string => typeof addr === 'string')
+      : [String(formData.supplierAddress || '')];
+
+    const billToAddress = Array.isArray(formData.billToAddress)
+      ? formData.billToAddress.filter((addr): addr is string => typeof addr === 'string')
+      : [String(formData.billToAddress || '')];
+
+    const shipToAddress = formData.shipToAddress
+      ? (Array.isArray(formData.shipToAddress)
+        ? formData.shipToAddress.filter((addr): addr is string => typeof addr === 'string')
+        : [String(formData.shipToAddress)])
+      : [''];
+
+    const payload: RegenerateInvoicePayload = {
+      ...formDataWithoutId,
+      invoiceId: selectedInvoice.id,
+      productName: formData.productName || '',
+      supplierAddress,
+      billToAddress,
+      shipToAddress,
+      amount: (formData.quantity || 0) * (formData.rate || 0),
+    };
+
+    const updatedInvoice = await regenerateInvoice(payload);
+
+    // Success feedback
+    alert('✅ Invoice updated successfully! PDF is being regenerated...');
+
+    // Close modal first
+    setShowRegenerateForm(false);
+    setSelectedInvoice(null);
+
+    // Poll for updated invoice with new PDF URL (maximum 10 attempts, 2 seconds apart)
+    let attempts = 0;
+    const maxAttempts = 1;
+    const pollInterval = 5000; // 5 seconds
+
+    const pollForUpdate = async () => {
+      attempts++;
+      
+      try {
+        // Fetch fresh invoice data from API
+        const response = await fetch(`${API_BASE_URL}/invoices/${updatedInvoice.id}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const freshInvoice = await response.json();
+          
+          // Update local state with fresh data
+          setInvoices(prev =>
+            prev.map(inv => inv.id === freshInvoice.id ? freshInvoice : inv)
+          );
+
+          console.log('✅ Invoice refreshed with updated PDF');
+        }
+      } catch (error) {
+        console.error('Error polling invoice:', error);
+      }
 
     try {
       // 1. Upload Image if exists

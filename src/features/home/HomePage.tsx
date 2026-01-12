@@ -158,13 +158,7 @@ const HomePage = () => {
     setShowRegenerateForm(true);
   };
 
-  // --- NEW: Updated Submit Logic ---
-  const handleRegenerateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedInvoice) return;
-
-    setRegenerating(true);
-    setError(null);
+// --- NEW: Updated Submit Logic ---
 const handleRegenerateSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   if (!selectedInvoice) return;
@@ -173,128 +167,60 @@ const handleRegenerateSubmit = async (e: React.FormEvent) => {
   setError(null);
 
   try {
-    const { invoiceId, ...formDataWithoutId } = formData;
-    // Ensure all address fields are properly typed as string arrays
-    const supplierAddress = Array.isArray(formData.supplierAddress)
-      ? formData.supplierAddress.filter((addr): addr is string => typeof addr === 'string')
-      : [String(formData.supplierAddress || '')];
+    // 1. Upload Image if exists
+    if (weightmentSlip) {
+      await uploadWeighmentSlips(selectedInvoice.id, [weightmentSlip]);
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for PDF generation
+    }
 
-    const billToAddress = Array.isArray(formData.billToAddress)
-      ? formData.billToAddress.filter((addr): addr is string => typeof addr === 'string')
-      : [String(formData.billToAddress || '')];
+    // 2. Prepare FormData
+    const payload = new FormData();
+    const append = (key: string, value: any) => payload.append(key, String(value ?? ''));
 
-    const shipToAddress = formData.shipToAddress
-      ? (Array.isArray(formData.shipToAddress)
-        ? formData.shipToAddress.filter((addr): addr is string => typeof addr === 'string')
-        : [String(formData.shipToAddress)])
-      : [''];
+    append('invoiceType', formData.invoiceType);
+    append('invoiceDate', formData.invoiceDate);
+    append('supplierName', formData.supplierName);
+    append('placeOfSupply', formData.placeOfSupply);
+    append('billToName', formData.billToName);
+    append('shipToName', formData.shipToName);
+    append('hsnCode', formData.hsnCode);
+    append('vehicleNumber', formData.vehicleNumber);
+    append('truckNumber', formData.truckNumber);
+    append('weighmentSlipNote', formData.weighmentSlipNote);
+    append('productName', formData.productName);
+    append('quantity', formData.quantity);
+    append('rate', formData.rate);
+    append('amount', (Number(formData.quantity) || 0) * (Number(formData.rate) || 0));
 
-    const payload: RegenerateInvoicePayload = {
-      ...formDataWithoutId,
-      invoiceId: selectedInvoice.id,
-      productName: formData.productName || '',
-      supplierAddress,
-      billToAddress,
-      shipToAddress,
-      amount: (formData.quantity || 0) * (formData.rate || 0),
+    const processArray = (key: string, arr: any) => {
+      const valid = Array.isArray(arr) ? arr.filter(x => typeof x === 'string') : [String(arr || '')];
+      valid.forEach(v => payload.append(key, v));
     };
+    processArray('supplierAddress', formData.supplierAddress);
+    processArray('billToAddress', formData.billToAddress);
+    processArray('shipToAddress', formData.shipToAddress);
 
-    const updatedInvoice = await regenerateInvoice(payload);
+    // 3. Update Text
+    await updateInvoice(selectedInvoice.id, payload);
 
-    // Success feedback
-    alert('✅ Invoice updated successfully! PDF is being regenerated...');
+    // 4. Final Wait & Refresh
+    const fresh = await getMyInsuranceForms();
+    setInvoices(fresh);
 
-    // Close modal first
+    alert('✅ Invoice updated successfully!');
     setShowRegenerateForm(false);
     setSelectedInvoice(null);
+    setWeightmentSlip(null);
 
-    // Poll for updated invoice with new PDF URL (maximum 10 attempts, 2 seconds apart)
-    let attempts = 0;
-    const maxAttempts = 1;
-    const pollInterval = 5000; // 5 seconds
-
-    const pollForUpdate = async () => {
-      attempts++;
-      
-      try {
-        // Fetch fresh invoice data from API
-        const response = await fetch(`${API_BASE_URL}/invoices/${updatedInvoice.id}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const freshInvoice = await response.json();
-          
-          // Update local state with fresh data
-          setInvoices(prev =>
-            prev.map(inv => inv.id === freshInvoice.id ? freshInvoice : inv)
-          );
-
-          console.log('✅ Invoice refreshed with updated PDF');
-        }
-      } catch (error) {
-        console.error('Error polling invoice:', error);
-      }
-
-    try {
-      // 1. Upload Image if exists
-      if (weightmentSlip) {
-        await uploadWeighmentSlips(selectedInvoice.id, [weightmentSlip]);
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for PDF generation
-      }
-
-      // 2. Prepare FormData
-      const payload = new FormData();
-      const append = (key: string, value: any) => payload.append(key, String(value ?? ''));
-
-      append('invoiceType', formData.invoiceType);
-      append('invoiceDate', formData.invoiceDate);
-      append('supplierName', formData.supplierName);
-      append('placeOfSupply', formData.placeOfSupply);
-      append('billToName', formData.billToName);
-      append('shipToName', formData.shipToName);
-      append('hsnCode', formData.hsnCode);
-      append('vehicleNumber', formData.vehicleNumber);
-      append('truckNumber', formData.truckNumber);
-      append('weighmentSlipNote', formData.weighmentSlipNote);
-      append('productName', formData.productName);
-      append('quantity', formData.quantity);
-      append('rate', formData.rate);
-      append('amount', (Number(formData.quantity) || 0) * (Number(formData.rate) || 0));
-
-      const processArray = (key: string, arr: any) => {
-        const valid = Array.isArray(arr) ? arr.filter(x => typeof x === 'string') : [String(arr || '')];
-        valid.forEach(v => payload.append(key, v));
-      };
-      processArray('supplierAddress', formData.supplierAddress);
-      processArray('billToAddress', formData.billToAddress);
-      processArray('shipToAddress', formData.shipToAddress);
-
-      // 3. Update Text
-      await updateInvoice(selectedInvoice.id, payload);
-
-      // 4. Final Wait & Refresh
-      // await new Promise(resolve => setTimeout(resolve, 5000));
-      const fresh = await getMyInsuranceForms();
-      setInvoices(fresh);
-
-      alert('✅ Invoice updated successfully!');
-      setShowRegenerateForm(false);
-      setSelectedInvoice(null);
-      setWeightmentSlip(null);
-
-    } catch (err: any) {
-      const errorMsg = Array.isArray(err.message)
-        ? err.message.join(', ')
-        : err.message || 'Failed to regenerate invoice';
-      setError(errorMsg);
-    } finally {
-      setRegenerating(false);
-    }
-  };
+  } catch (err: any) {
+    const errorMsg = Array.isArray(err.message)
+      ? err.message.join(', ')
+      : err.message || 'Failed to regenerate invoice';
+    setError(errorMsg);
+  } finally {
+    setRegenerating(false);
+  }
+};
 
   const username = user.mobileNumber || "user";
 

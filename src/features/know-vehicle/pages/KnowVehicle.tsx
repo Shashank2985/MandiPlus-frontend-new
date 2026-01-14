@@ -198,10 +198,19 @@ const KnowVehiclePage = () => {
                 setVerifyVehicleNumber(userInput);
                 setMessages(prev => [...prev, { text: '🔍 Checking vehicle condition...', sender: 'bot', timestamp: new Date() }]);
                 try {
+                    // In the verify flow section, replace the success message with:
                     const res = await verifyVehicleCondition(userInput);
+                    const verificationMessage = res.verified
+                        ? '✅ Vehicle is verified and in good condition!'
+                        : `❌ Vehicle verification failed. ${res.reason || ''}`;
+
                     setMessages(prev => {
                         const newHistory = prev.slice(0, -1);
-                        return [...newHistory, { text: res?.message || '✅ Vehicle verification result:', sender: 'bot', timestamp: new Date() }];
+                        return [...newHistory, {
+                            text: verificationMessage,
+                            sender: 'bot',
+                            timestamp: new Date()
+                        }];
                     });
                 } catch (err: any) {
                     setMessages(prev => {

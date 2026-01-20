@@ -72,6 +72,14 @@ export interface ClaimRequest {
   surveyorName?: string;
   surveyorContact?: string;
   claimFormUrl?: string; // URL for the generated PDF
+  // New individual media fields
+  fir?: string | null; // FIR document URL
+  gpsPictures?: string | null; // GPS pictures URL
+  accidentPic?: string | null; // Accident picture URL
+  inspectionReport?: string | null; // Inspection report URL
+  weighmentSlip?: string | null; // Weighment slip URL
+  damageFormUrl?: string | null; // Damage form PDF URL
+  // Legacy field (deprecated)
   supportedMedia?: string[];
   notes?: string;
 }
@@ -207,20 +215,24 @@ export const createClaimByTruck = async (
 };
 
 /**
- * NEW: Upload Supporting Media for Claim
- * POST /claim-requests/:id/supporting-media
+ * NEW: Upload Individual Media File for Claim
+ * POST /claim-requests/:id/media/:mediaType
+ * @param claimId - Claim request ID
+ * @param mediaType - One of: 'fir', 'gpsPictures', 'accidentPic', 'inspectionReport', 'weighmentSlip'
+ * @param file - Single file to upload
  */
 export const uploadClaimMedia = async (
   claimId: string,
-  files: File[]
+  mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip',
+  file: File
 ): Promise<ClaimRequest> => {
   try {
     const token = localStorage.getItem("accessToken");
     const formData = new FormData();
-    files.forEach((file) => formData.append("files", file));
+    formData.append("file", file);
 
     const response = await axios.post(
-      `${API_BASE_URL}/claim-requests/${claimId}/supporting-media`,
+      `${API_BASE_URL}/claim-requests/${claimId}/media/${mediaType}`,
       formData,
       {
         headers: {

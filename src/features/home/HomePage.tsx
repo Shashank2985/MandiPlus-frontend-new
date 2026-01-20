@@ -67,8 +67,10 @@ const HomePage = () => {
 
   // --- Cropper & File State ---
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const claimMediaRef = useRef<HTMLInputElement>(null); // ✅ NEW: Ref for claim uploads
   const [activeClaimIdForUpload, setActiveClaimIdForUpload] = useState<string | null>(null); // ✅ NEW
+  const [activeMediaType, setActiveMediaType] = useState<'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip' | null>(null); // ✅ NEW
+  const [showClaimDetailModal, setShowClaimDetailModal] = useState(false); // ✅ NEW
+  const [selectedClaimForDetail, setSelectedClaimForDetail] = useState<ClaimRequest | null>(null); // ✅ NEW
 
   const cropperRef = useRef<ReactCropperElement>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -175,36 +177,46 @@ const HomePage = () => {
     }
   };
 
-  // --- NEW: Upload Media Handler ---
+  // --- NEW: Upload Media Handler (Individual Media Types) ---
   const handleClaimMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0 && activeClaimIdForUpload) {
+    if (e.target.files && e.target.files.length > 0 && activeClaimIdForUpload && activeMediaType) {
       try {
-        const originalFiles = Array.from(e.target.files);
-
-        const uploadFiles = originalFiles.map((file) => {
-          const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-          const safeType = `application/hack.${extension}`;
-          return new File([file], file.name, { type: safeType });
-        });
-      
-
-        await uploadClaimMedia(activeClaimIdForUpload, uploadFiles);
-
-        alert("Files uploaded successfully!");
+        const file = e.target.files[0];
+        await uploadClaimMedia(activeClaimIdForUpload, activeMediaType, file);
+        alert("File uploaded successfully!");
         fetchClaims();
+        // Refresh selected claim if detail modal is open
+        if (selectedClaimForDetail && selectedClaimForDetail.id === activeClaimIdForUpload) {
+          const updatedClaims = await getMyClaimsForms();
+          const updatedClaim = updatedClaims.find(c => c.id === activeClaimIdForUpload);
+          if (updatedClaim) {
+            setSelectedClaimForDetail(updatedClaim);
+          }
+        }
       } catch (err: any) {
         console.error("Upload failed:", err);
-        const msg = err.response?.data?.message || err.message || "Failed to upload files.";
+        const msg = err.response?.data?.message || err.message || "Failed to upload file.";
         alert(`Upload Failed: ${msg}`);
       } finally {
         setActiveClaimIdForUpload(null);
-        if (claimMediaRef.current) claimMediaRef.current.value = '';
+        setActiveMediaType(null);
+        e.target.value = '';
       }
     }
   };
 
+  const openClaimDetailModal = (claim: ClaimRequest) => {
+    setSelectedClaimForDetail(claim);
+    setShowClaimDetailModal(true);
+  };
+
   // --- NEW: Damage Form Logic ---
   const openDamageForm = (claim: ClaimRequest) => {
+    // If damage form already exists, just show a message
+    if (claim.damageFormUrl) {
+      window.open(claim.damageFormUrl, '_blank');
+      return;
+    }
     setSelectedClaimForDamage(claim);
     setDamageFormData({
       damageCertificateDate: new Date().toISOString().split('T')[0],
@@ -641,24 +653,25 @@ const HomePage = () => {
 
                         <div className="flex flex-wrap gap-2 mt-4">
                           <button
-                            onClick={() => {
-                              setActiveClaimIdForUpload(claim.id);
-                              claimMediaRef.current?.click();
-                            }}
-                            className="bg-gray-100 text-gray-700 px-3 py-2 rounded-xl text-xs font-medium hover:bg-gray-200 flex items-center gap-1"
+                            onClick={() => openClaimDetailModal(claim)}
+                            className="bg-blue-50 text-blue-700 px-3 py-2 rounded-xl text-xs font-medium hover:bg-blue-100 border border-blue-100 flex items-center gap-1"
                           >
-                            📷 Upload Photos
+                            📋 Manage Documents
                           </button>
 
                           <button
                             onClick={() => openDamageForm(claim)}
-                            className="bg-red-50 text-red-700 px-3 py-2 rounded-xl text-xs font-medium hover:bg-red-100 border border-red-100"
+                            className={`px-3 py-2 rounded-xl text-xs font-medium border flex items-center gap-1 ${
+                              claim.damageFormUrl
+                                ? 'bg-green-50 text-green-700 hover:bg-green-100 border-green-100'
+                                : 'bg-red-50 text-red-700 hover:bg-red-100 border-red-100'
+                            }`}
                           >
-                            📝 Damage Form
+                            {claim.damageFormUrl ? '✅ Damage Form' : '📝 Damage Form'}
                           </button>
 
                           {claim.claimFormUrl && (
-                            <a href={claim.claimFormUrl} target="_blank" className="bg-green-50 text-green-700 px-3 py-2 rounded-xl text-xs font-medium border border-green-100">
+                            <a href={claim.claimFormUrl} target="_blank" className="bg-purple-50 text-purple-700 px-3 py-2 rounded-xl text-xs font-medium border border-purple-100">
                               📄 View Cert
                             </a>
                           )}
@@ -672,12 +685,134 @@ const HomePage = () => {
             {/* Hidden Input for Claim Media Upload */}
             <input
               type="file"
-              multiple
-              ref={claimMediaRef}
+              id="claim-media-upload"
               className="hidden"
               onChange={handleClaimMediaUpload}
-              accept="image/*,application/pdf"
+              accept="image/*,application/pdf,.doc,.docx"
             />
+          </div>
+        )}
+
+        {/* ✅ NEW: CLAIM DETAIL MODAL (Media Management) */}
+        {showClaimDetailModal && selectedClaimForDetail && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center rounded-t-3xl z-10">
+                <h3 className="text-xl font-bold text-slate-800">Claim Documents</h3>
+                <button onClick={() => setShowClaimDetailModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+              </div>
+
+              <div className="p-6">
+                {/* Claim Info */}
+                <div className="mb-6 p-4 bg-purple-50 rounded-2xl">
+                  <div className="text-sm space-y-1">
+                    <div><span className="font-semibold">Invoice:</span> {selectedClaimForDetail.invoice?.invoiceNumber || 'N/A'}</div>
+                    <div><span className="font-semibold">Truck:</span> {selectedClaimForDetail.invoice?.vehicleNumber || 'N/A'}</div>
+                    <div><span className="font-semibold">Status:</span> 
+                      <span className={`ml-2 inline-block px-2 py-1 rounded-lg text-xs font-bold ${
+                        selectedClaimForDetail.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                        selectedClaimForDetail.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {selectedClaimForDetail.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Media Upload Sections */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-slate-800 mb-3">Documents & Media</h4>
+                  
+                  <UserMediaUploadSection
+                    label="FIR Document"
+                    mediaType="fir"
+                    existingUrl={selectedClaimForDetail.fir}
+                    claimId={selectedClaimForDetail.id}
+                    onUploadClick={(mediaType) => {
+                      setActiveClaimIdForUpload(selectedClaimForDetail.id);
+                      setActiveMediaType(mediaType);
+                      document.getElementById('claim-media-upload')?.click();
+                    }}
+                  />
+
+                  <UserMediaUploadSection
+                    label="GPS Pictures"
+                    mediaType="gpsPictures"
+                    existingUrl={selectedClaimForDetail.gpsPictures}
+                    claimId={selectedClaimForDetail.id}
+                    onUploadClick={(mediaType) => {
+                      setActiveClaimIdForUpload(selectedClaimForDetail.id);
+                      setActiveMediaType(mediaType);
+                      document.getElementById('claim-media-upload')?.click();
+                    }}
+                  />
+
+                  <UserMediaUploadSection
+                    label="Accident Picture"
+                    mediaType="accidentPic"
+                    existingUrl={selectedClaimForDetail.accidentPic}
+                    claimId={selectedClaimForDetail.id}
+                    onUploadClick={(mediaType) => {
+                      setActiveClaimIdForUpload(selectedClaimForDetail.id);
+                      setActiveMediaType(mediaType);
+                      document.getElementById('claim-media-upload')?.click();
+                    }}
+                  />
+
+                  <UserMediaUploadSection
+                    label="Inspection Report"
+                    mediaType="inspectionReport"
+                    existingUrl={selectedClaimForDetail.inspectionReport}
+                    claimId={selectedClaimForDetail.id}
+                    onUploadClick={(mediaType) => {
+                      setActiveClaimIdForUpload(selectedClaimForDetail.id);
+                      setActiveMediaType(mediaType);
+                      document.getElementById('claim-media-upload')?.click();
+                    }}
+                  />
+
+                  <UserMediaUploadSection
+                    label="Weighment Slip"
+                    mediaType="weighmentSlip"
+                    existingUrl={selectedClaimForDetail.weighmentSlip}
+                    claimId={selectedClaimForDetail.id}
+                    onUploadClick={(mediaType) => {
+                      setActiveClaimIdForUpload(selectedClaimForDetail.id);
+                      setActiveMediaType(mediaType);
+                      document.getElementById('claim-media-upload')?.click();
+                    }}
+                  />
+
+                  {/* Damage Form Status */}
+                  <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-700">Damage Form</span>
+                      {selectedClaimForDetail.damageFormUrl && <CheckIcon className="w-5 h-5 text-green-600" />}
+                    </div>
+                    {selectedClaimForDetail.damageFormUrl ? (
+                      <a
+                        href={selectedClaimForDetail.damageFormUrl}
+                        target="_blank"
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        View PDF
+                      </a>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setShowClaimDetailModal(false);
+                          openDamageForm(selectedClaimForDetail);
+                        }}
+                        className="text-green-600 hover:text-green-800 text-sm"
+                      >
+                        Create
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1113,5 +1248,51 @@ const HomePage = () => {
     </ProtectedRoute>
   );
 };
+
+// User Media Upload Section Component
+function UserMediaUploadSection({
+    label,
+    mediaType,
+    existingUrl,
+    claimId,
+    onUploadClick
+}: {
+    label: string;
+    mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip';
+    existingUrl?: string | null;
+    claimId: string;
+    onUploadClick: (mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip') => void;
+}) {
+    return (
+        <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-700">{label}</span>
+                {existingUrl && <CheckIcon className="w-5 h-5 text-green-600" />}
+            </div>
+            <div className="flex items-center gap-2">
+                {existingUrl && (
+                    <a
+                        href={existingUrl}
+                        target="_blank"
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                        title="View document"
+                    >
+                        View
+                    </a>
+                )}
+                <button
+                    onClick={() => onUploadClick(mediaType)}
+                    className={`text-sm px-3 py-1 rounded-lg ${
+                        existingUrl
+                            ? 'text-green-600 hover:text-green-800 border border-green-600'
+                            : 'text-blue-600 hover:text-blue-800 border border-blue-600'
+                    }`}
+                >
+                    {existingUrl ? 'Update' : 'Upload'}
+                </button>
+            </div>
+        </div>
+    );
+}
 
 export default HomePage;

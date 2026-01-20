@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { adminApi, ClaimRequest, ClaimStatus, UpdateClaimStatusDto } from '@/features/admin/api/admin.api'; // Adjust path if needed
 import {
     FunnelIcon,
@@ -8,7 +8,12 @@ import {
     PlusIcon,
     EyeIcon,
     PencilSquareIcon,
-    XMarkIcon
+    XMarkIcon,
+    CheckIcon,
+    DocumentIcon,
+    PhotoIcon,
+    CloudArrowUpIcon,
+    ArrowPathIcon
 } from '@heroicons/react/24/outline';
 
 export default function ClaimsPage() {
@@ -22,7 +27,10 @@ export default function ClaimsPage() {
     // Modal States
     const [showUpdateModal, setShowUpdateModal] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showDetailModal, setShowDetailModal] = useState(false);
+    const [showDamageModal, setShowDamageModal] = useState(false);
     const [selectedClaim, setSelectedClaim] = useState<ClaimRequest | null>(null);
+    const [uploadingMedia, setUploadingMedia] = useState<string | null>(null); // mediaType being uploaded
 
     // Form States
     const [updateForm, setUpdateForm] = useState<UpdateClaimStatusDto>({
@@ -92,6 +100,40 @@ export default function ClaimsPage() {
             notes: claim.notes || '',
         });
         setShowUpdateModal(true);
+    };
+
+    const openDetailModal = (claim: ClaimRequest) => {
+        setSelectedClaim(claim);
+        setShowDetailModal(true);
+    };
+
+    const handleMediaUpload = async (claimId: string, mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip', file: File) => {
+        setUploadingMedia(mediaType);
+        try {
+            const response = await adminApi.uploadClaimMedia(claimId, mediaType, file);
+            if (response.success) {
+                alert('Media uploaded successfully');
+                fetchClaims();
+                // Refresh selected claim if detail modal is open
+                if (selectedClaim && selectedClaim.id === claimId) {
+                    const updatedResponse = await adminApi.getClaimById(claimId);
+                    if (updatedResponse.success && updatedResponse.data) {
+                        setSelectedClaim(updatedResponse.data);
+                    }
+                }
+            } else {
+                alert(response.message || 'Failed to upload media');
+            }
+        } catch (error) {
+            alert('Failed to upload media');
+        } finally {
+            setUploadingMedia(null);
+        }
+    };
+
+    const openDamageFormModal = (claim: ClaimRequest) => {
+        setSelectedClaim(claim);
+        setShowDamageModal(true);
     };
 
     // Helper for Status Badge Color
@@ -206,11 +248,13 @@ export default function ClaimsPage() {
                                                 </td>
                                                 <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                                                     <div className="flex justify-end gap-2">
-                                                        {claim.claimFormUrl && (
-                                                            <a href={claim.claimFormUrl} target="_blank" className="text-blue-600 hover:text-blue-900" title="View Form">
-                                                                <EyeIcon className="w-5 h-5" />
-                                                            </a>
-                                                        )}
+                                                        <button
+                                                            onClick={() => openDetailModal(claim)}
+                                                            className="text-blue-600 hover:text-blue-900"
+                                                            title="View Details & Manage Media"
+                                                        >
+                                                            <EyeIcon className="w-5 h-5" />
+                                                        </button>
                                                         <button
                                                             onClick={() => openUpdateModal(claim)}
                                                             className="text-green-600 hover:text-green-900"
@@ -309,6 +353,183 @@ export default function ClaimsPage() {
                 </div>
             )}
 
+            {/* --- DETAIL MODAL (Media Management) --- */}
+            {showDetailModal && selectedClaim && (
+                <div className="relative z-50" aria-labelledby="detail-modal-title" role="dialog" aria-modal="true">
+                    <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+                    <div className="fixed inset-0 z-10 overflow-y-auto">
+                        <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+                            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+                                <div className="bg-white px-4 pt-5 pb-4 sm:p-6">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <h3 className="text-lg font-medium leading-6 text-gray-900" id="detail-modal-title">
+                                            Claim Details & Media Management
+                                        </h3>
+                                        <button type="button" onClick={() => setShowDetailModal(false)}>
+                                            <XMarkIcon className="w-6 h-6 text-gray-400" />
+                                        </button>
+                                    </div>
+
+                                    {/* Claim Info */}
+                                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div>
+                                                <span className="font-medium">Claim ID:</span> {selectedClaim.id.slice(0, 8)}...
+                                            </div>
+                                            <div>
+                                                <span className="font-medium">Status:</span> 
+                                                <span className={`ml-2 inline-flex rounded-full px-2 text-xs font-semibold ${getStatusColor(selectedClaim.status)}`}>
+                                                    {selectedClaim.status.replace('_', ' ')}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span className="font-medium">Truck:</span> {selectedClaim.invoice?.vehicleNumber || 'N/A'}
+                                            </div>
+                                            <div>
+                                                <span className="font-medium">Invoice:</span> {selectedClaim.invoice?.invoiceNumber || 'N/A'}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Media Upload Sections */}
+                                    <div className="space-y-4">
+                                        <h4 className="font-semibold text-gray-900">Documents & Media</h4>
+                                        
+                                        {/* FIR */}
+                                        <MediaUploadSection
+                                            label="FIR Document"
+                                            mediaType="fir"
+                                            existingUrl={selectedClaim.fir}
+                                            claimId={selectedClaim.id}
+                                            onUpload={handleMediaUpload}
+                                            uploading={uploadingMedia === 'fir'}
+                                            accept=".pdf,.doc,.docx"
+                                        />
+
+                                        {/* GPS Pictures */}
+                                        <MediaUploadSection
+                                            label="GPS Pictures"
+                                            mediaType="gpsPictures"
+                                            existingUrl={selectedClaim.gpsPictures}
+                                            claimId={selectedClaim.id}
+                                            onUpload={handleMediaUpload}
+                                            uploading={uploadingMedia === 'gpsPictures'}
+                                            accept=".jpg,.jpeg,.png,.gif"
+                                        />
+
+                                        {/* Accident Picture */}
+                                        <MediaUploadSection
+                                            label="Accident Picture"
+                                            mediaType="accidentPic"
+                                            existingUrl={selectedClaim.accidentPic}
+                                            claimId={selectedClaim.id}
+                                            onUpload={handleMediaUpload}
+                                            uploading={uploadingMedia === 'accidentPic'}
+                                            accept=".jpg,.jpeg,.png,.gif"
+                                        />
+
+                                        {/* Inspection Report */}
+                                        <MediaUploadSection
+                                            label="Inspection Report"
+                                            mediaType="inspectionReport"
+                                            existingUrl={selectedClaim.inspectionReport}
+                                            claimId={selectedClaim.id}
+                                            onUpload={handleMediaUpload}
+                                            uploading={uploadingMedia === 'inspectionReport'}
+                                            accept=".pdf,.doc,.docx"
+                                        />
+
+                                        {/* Weighment Slip */}
+                                        <MediaUploadSection
+                                            label="Weighment Slip"
+                                            mediaType="weighmentSlip"
+                                            existingUrl={selectedClaim.weighmentSlip}
+                                            claimId={selectedClaim.id}
+                                            onUpload={handleMediaUpload}
+                                            uploading={uploadingMedia === 'weighmentSlip'}
+                                            accept=".pdf,.jpg,.jpeg,.png"
+                                        />
+
+                                        {/* Damage Form */}
+                                        <div className="border border-gray-200 rounded-lg p-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-medium text-gray-700">Damage Form</span>
+                                                    {selectedClaim.damageFormUrl ? (
+                                                        <CheckIcon className="w-5 h-5 text-green-600" />
+                                                    ) : null}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    {selectedClaim.damageFormUrl ? (
+                                                        <>
+                                                            <a
+                                                                href={selectedClaim.damageFormUrl}
+                                                                target="_blank"
+                                                                className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                                                            >
+                                                                <DocumentIcon className="w-4 h-4" />
+                                                                View PDF
+                                                            </a>
+                                                            <button
+                                                                onClick={() => openDamageFormModal(selectedClaim)}
+                                                                className="text-green-600 hover:text-green-800 text-sm flex items-center gap-1"
+                                                            >
+                                                                <PencilSquareIcon className="w-4 h-4" />
+                                                                Update
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => openDamageFormModal(selectedClaim)}
+                                                            className="text-green-600 hover:text-green-800 text-sm flex items-center gap-1 px-3 py-1 border border-green-600 rounded"
+                                                        >
+                                                            <PlusIcon className="w-4 h-4" />
+                                                            Create Damage Form
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowDetailModal(false)}
+                                        className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- DAMAGE FORM MODAL --- */}
+            {showDamageModal && selectedClaim && (
+                <DamageFormModal
+                    claim={selectedClaim}
+                    onClose={() => {
+                        setShowDamageModal(false);
+                        setSelectedClaim(null);
+                    }}
+                    onSuccess={() => {
+                        setShowDamageModal(false);
+                        fetchClaims();
+                        if (showDetailModal) {
+                            // Refresh claim details
+                            adminApi.getClaimById(selectedClaim.id).then(response => {
+                                if (response.success && response.data) {
+                                    setSelectedClaim(response.data);
+                                }
+                            });
+                        }
+                    }}
+                />
+            )}
+
             {/* --- CREATE CLAIM MODAL --- */}
             {showCreateModal && (
                 <div className="relative z-50">
@@ -347,6 +568,326 @@ export default function ClaimsPage() {
                 </div>
             )}
 
+        </div>
+    );
+}
+
+// Media Upload Section Component
+function MediaUploadSection({
+    label,
+    mediaType,
+    existingUrl,
+    claimId,
+    onUpload,
+    uploading,
+    accept
+}: {
+    label: string;
+    mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip';
+    existingUrl?: string | null;
+    claimId: string;
+    onUpload: (claimId: string, mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip', file: File) => void;
+    uploading: boolean;
+    accept: string;
+}) {
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            onUpload(claimId, mediaType, file);
+        }
+        // Reset input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    return (
+        <div className="border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-700">{label}</span>
+                    {existingUrl && <CheckIcon className="w-5 h-5 text-green-600" />}
+                </div>
+                <div className="flex items-center gap-2">
+                    {existingUrl && (
+                        <a
+                            href={existingUrl}
+                            target="_blank"
+                            className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                            title="View document"
+                        >
+                            <EyeIcon className="w-4 h-4" />
+                            View
+                        </a>
+                    )}
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept={accept}
+                        className="hidden"
+                        id={`file-${mediaType}-${claimId}`}
+                    />
+                    <label
+                        htmlFor={`file-${mediaType}-${claimId}`}
+                        className={`text-sm flex items-center gap-1 px-3 py-1 rounded cursor-pointer ${
+                            existingUrl
+                                ? 'text-green-600 hover:text-green-800 border border-green-600'
+                                : 'text-blue-600 hover:text-blue-800 border border-blue-600'
+                        } ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        {uploading ? (
+                            <>
+                                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                                Uploading...
+                            </>
+                        ) : (
+                            <>
+                                <CloudArrowUpIcon className="w-4 h-4" />
+                                {existingUrl ? 'Update' : 'Upload'}
+                            </>
+                        )}
+                    </label>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Damage Form Modal Component
+function DamageFormModal({
+    claim,
+    onClose,
+    onSuccess
+}: {
+    claim: ClaimRequest;
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const [formData, setFormData] = useState({
+        damageCertificateDate: new Date().toISOString().split('T')[0],
+        transportReceiptMemoNo: claim.invoice?.invoiceNumber || '',
+        transportReceiptDate: claim.invoice?.date || '',
+        loadedWeightKg: claim.invoice?.quantity || 0,
+        productName: claim.invoice?.item || '',
+        fromParty: claim.invoice?.supplier || '',
+        forParty: claim.invoice?.buyer || '',
+        accidentDate: '',
+        accidentLocation: '',
+        accidentDescription: '',
+        agreedDamageAmountNumber: 0,
+        agreedDamageAmountWords: '',
+        authorizedSignatoryName: '',
+    });
+    const [submitting, setSubmitting] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            const response = await adminApi.submitDamageForm(claim.id, formData);
+            if (response.success) {
+                alert('Damage form submitted successfully');
+                onSuccess();
+            } else {
+                alert(response.message || 'Failed to submit damage form');
+            }
+        } catch (error) {
+            alert('Failed to submit damage form');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="relative z-50" aria-labelledby="damage-modal-title" role="dialog" aria-modal="true">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+            <div className="fixed inset-0 z-10 overflow-y-auto">
+                <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+                    <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <form onSubmit={handleSubmit}>
+                            <div className="bg-white px-4 pt-5 pb-4 sm:p-6">
+                                <div className="flex justify-between items-start mb-4">
+                                    <h3 className="text-lg font-medium leading-6 text-gray-900" id="damage-modal-title">
+                                        Damage Certificate Form
+                                    </h3>
+                                    <button type="button" onClick={onClose}>
+                                        <XMarkIcon className="w-6 h-6 text-gray-400" />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Date</label>
+                                            <input
+                                                type="date"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.damageCertificateDate}
+                                                onChange={(e) => setFormData({ ...formData, damageCertificateDate: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Loaded Weight (Kg)</label>
+                                            <input
+                                                type="number"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.loadedWeightKg}
+                                                onChange={(e) => setFormData({ ...formData, loadedWeightKg: Number(e.target.value) })}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Receipt/Memo No</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.transportReceiptMemoNo}
+                                                onChange={(e) => setFormData({ ...formData, transportReceiptMemoNo: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Receipt Date</label>
+                                            <input
+                                                type="date"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.transportReceiptDate}
+                                                onChange={(e) => setFormData({ ...formData, transportReceiptDate: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">From Party</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.fromParty}
+                                                onChange={(e) => setFormData({ ...formData, fromParty: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">For Party</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.forParty}
+                                                onChange={(e) => setFormData({ ...formData, forParty: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Product Name</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                            value={formData.productName}
+                                            onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Accident Date</label>
+                                            <input
+                                                type="date"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.accidentDate}
+                                                onChange={(e) => setFormData({ ...formData, accidentDate: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Accident Location</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.accidentLocation}
+                                                onChange={(e) => setFormData({ ...formData, accidentLocation: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Accident Description</label>
+                                        <textarea
+                                            required
+                                            rows={3}
+                                            className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                            value={formData.accidentDescription}
+                                            onChange={(e) => setFormData({ ...formData, accidentDescription: e.target.value })}
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Agreed Amount (₹)</label>
+                                            <input
+                                                type="number"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.agreedDamageAmountNumber}
+                                                onChange={(e) => setFormData({ ...formData, agreedDamageAmountNumber: Number(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Amount in Words</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                                value={formData.agreedDamageAmountWords}
+                                                onChange={(e) => setFormData({ ...formData, agreedDamageAmountWords: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Authorized Signatory Name</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 text-sm"
+                                            value={formData.authorizedSignatoryName}
+                                            onChange={(e) => setFormData({ ...formData, authorizedSignatoryName: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                                <button
+                                    type="submit"
+                                    disabled={submitting}
+                                    className="inline-flex w-full justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-green-700 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                                >
+                                    {submitting ? 'Submitting...' : 'Submit Damage Form'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

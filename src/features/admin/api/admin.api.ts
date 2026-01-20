@@ -92,6 +92,14 @@ export interface ClaimRequest {
   surveyorContact?: string;
   notes?: string;
   claimFormUrl?: string;
+  // New individual media fields
+  fir?: string | null; // FIR document URL
+  gpsPictures?: string | null; // GPS pictures URL
+  accidentPic?: string | null; // Accident picture URL
+  inspectionReport?: string | null; // Inspection report URL
+  weighmentSlip?: string | null; // Weighment slip URL
+  damageFormUrl?: string | null; // Damage form PDF URL
+  // Legacy field (deprecated)
   supportedMedia?: string[];
 }
 
@@ -423,6 +431,83 @@ class AdminApi {
         success: false,
         message:
           error.response?.data?.message || "Failed to update claim status",
+        error: error.message,
+      };
+    }
+  };
+
+  /**
+   * Upload media file for a claim request
+   * POST /claim-requests/:id/media/:mediaType
+   */
+  public uploadClaimMedia = async (
+    claimId: string,
+    mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip',
+    file: File
+  ): Promise<ApiResponse<ClaimRequest>> => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await this.client.post<ClaimRequest>(
+        `/claim-requests/${claimId}/media/${mediaType}`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+      return {
+        success: true,
+        data: response.data,
+        message: "Media uploaded successfully",
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Failed to upload media",
+        error: error.message,
+      };
+    }
+  };
+
+  /**
+   * Submit damage form for a claim request
+   * POST /claim-requests/:id/damage-form
+   */
+  public submitDamageForm = async (
+    claimId: string,
+    damageFormData: {
+      damageCertificateDate: string;
+      transportReceiptMemoNo: string;
+      transportReceiptDate: string;
+      loadedWeightKg: number;
+      productName: string;
+      fromParty: string;
+      forParty: string;
+      accidentDate: string;
+      accidentLocation: string;
+      accidentDescription: string;
+      agreedDamageAmountNumber: number;
+      agreedDamageAmountWords: string;
+      authorizedSignatoryName: string;
+    }
+  ): Promise<ApiResponse<ClaimRequest>> => {
+    try {
+      const response = await this.client.post<ClaimRequest>(
+        `/claim-requests/${claimId}/damage-form`,
+        damageFormData
+      );
+      return {
+        success: true,
+        data: response.data,
+        message: "Damage form submitted successfully",
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Failed to submit damage form",
         error: error.message,
       };
     }

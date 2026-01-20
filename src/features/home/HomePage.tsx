@@ -1261,7 +1261,7 @@ function UserMediaUploadSection({
     mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip';
     existingUrl?: string | null;
     claimId: string;
-    onUploadClick: (mediaType: typeof mediaType) => void;
+    onUploadClick: (mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip') => void;
 }) {
     return (
         <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-between">

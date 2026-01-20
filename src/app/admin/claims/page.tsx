@@ -586,7 +586,7 @@ function MediaUploadSection({
     mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip';
     existingUrl?: string | null;
     claimId: string;
-    onUpload: (claimId: string, mediaType: typeof mediaType, file: File) => void;
+    onUpload: (claimId: string, mediaType: 'fir' | 'gpsPictures' | 'accidentPic' | 'inspectionReport' | 'weighmentSlip', file: File) => void;
     uploading: boolean;
     accept: string;
 }) {
@@ -669,11 +669,11 @@ function DamageFormModal({
     const [formData, setFormData] = useState({
         damageCertificateDate: new Date().toISOString().split('T')[0],
         transportReceiptMemoNo: claim.invoice?.invoiceNumber || '',
-        transportReceiptDate: claim.invoice?.invoiceDate || '',
+        transportReceiptDate: claim.invoice?.date || '',
         loadedWeightKg: claim.invoice?.quantity || 0,
-        productName: claim.invoice?.productName?.[0] || '',
-        fromParty: claim.invoice?.supplierName || '',
-        forParty: claim.invoice?.billToName || '',
+        productName: claim.invoice?.item || '',
+        fromParty: claim.invoice?.supplier || '',
+        forParty: claim.invoice?.buyer || '',
         accidentDate: '',
         accidentLocation: '',
         accidentDescription: '',

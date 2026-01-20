@@ -483,13 +483,14 @@ class AdminApi {
    */
   public uploadClaimMedia = async (
     claimId: string,
-
     mediaType:
       | "fir"
       | "gpsPictures"
       | "accidentPic"
       | "inspectionReport"
-      | "weighmentSlip",
+      | "weighmentSlip"
+      | "lorryReceipt"
+      | "insurancePolicy",
     file: File,
   ): Promise<ApiResponse<ClaimRequest>> => {
     try {
@@ -505,6 +506,7 @@ class AdminApi {
           },
         },
       );
+
       return {
         success: true,
         data: response.data,

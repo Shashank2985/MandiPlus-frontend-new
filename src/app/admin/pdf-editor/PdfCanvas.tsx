@@ -165,17 +165,24 @@ export default function PdfCanvas({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="relative inline-block border bg-white">
-        <div ref={wrapperRef} />
-        <canvas
-          ref={overlayRef}
-          className="absolute top-0 left-0 cursor-crosshair"
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-        />
-      </div>
+<div className="space-y-4">
+  <div
+    className="relative border bg-white overflow-hidden"
+    style={{
+      width: canvasEl?.style.width,
+      height: canvasEl?.style.height,
+    }}
+  >
+    <div ref={wrapperRef} />
+    <canvas
+      ref={overlayRef}
+      className="absolute top-0 left-0 cursor-crosshair"
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+    />
+  </div>
+
 
       {totalPages > 1 && (
         <div className="flex gap-2 items-center">

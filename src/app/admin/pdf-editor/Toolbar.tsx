@@ -53,7 +53,10 @@ export default function Toolbar({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "edited-insurance.pdf";
+      const originalName = file.name.replace(/\.pdf$/i, "");
+
+      a.download = `${originalName}.pdf`;
+
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {

@@ -9,7 +9,7 @@ export async function loadPdfPage(
   pageNumber: number,
   canvas: HTMLCanvasElement,
 ): Promise<{ totalPages: number } | undefined> {
-  // cancel previous render safely
+  // cancel previous render
   if (currentRenderTask) {
     try {
       currentRenderTask.cancel();
@@ -21,15 +21,44 @@ export async function loadPdfPage(
   const pdf = await getDocument({ data: arrayBuffer }).promise;
   const page = await pdf.getPage(pageNumber);
 
-  const viewport = page.getViewport({ scale: 1.5 });
+  /* ----------------------------------------
+     QUALITY SETTINGS (IMPORTANT)
+  ---------------------------------------- */
 
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
+  // 👇 Increase this for sharper preview
+  const BASE_SCALE = 2.5; // was 1.5
 
-  // ✅ pdf.js v5 correct render API
+  // 👇 Clamp DPR so it doesn’t explode memory
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  const viewport = page.getViewport({ scale: BASE_SCALE });
+  const scaledViewport = page.getViewport({
+    scale: BASE_SCALE * dpr,
+  });
+
+  // Actual render resolution
+  canvas.width = Math.floor(scaledViewport.width);
+  canvas.height = Math.floor(scaledViewport.height);
+
+  // Visual size
+  canvas.style.width = `${viewport.width}px`;
+  canvas.style.height = `${viewport.height}px`;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  // Reset transform completely
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  // Apply DPR scaling
+  ctx.scale(dpr, dpr);
+
   const renderTask = page.render({
-    canvas,
+    canvasContext: ctx,
     viewport,
+    canvas,
   });
 
   currentRenderTask = renderTask;
